@@ -118,9 +118,18 @@ test("tool/call 计入 tools，不产生对话消息", () => {
 		}
 	]);
 	assert.equal(view.messages.length, 0);
-	assert.deepEqual(view.tools, [
-		{ seq: callEvent.seq, callId: "call-1", name: "run_code" }
-	]);
+	assert.equal(view.tools.length, 1);
+	assert.equal(view.tools[0].callId, "call-1");
+	assert.equal(view.tools[0].name, "run_code");
+	assert.equal(view.tools[0].status, "done", "tool/result 后状态应为 done");
+	assert.ok("args" in view.tools[0], "应保留参数摘要");
+});
+
+test("tool/call 未收到 result 时 status 保持 running", () => {
+	const callEvent = event("tool/call", { turn: 1, step: 0, callId: "c-2", name: "read", arguments: '{"path":"a.txt"}' });
+	const view = foldEvents([{ event: callEvent }]);
+	assert.equal(view.tools[0].status, "running");
+	assert.equal(view.tools[0].args, '{"path":"a.txt"}');
 });
 
 test("未知事件（merge-extensible 词汇增长）安全跳过", () => {

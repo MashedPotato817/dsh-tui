@@ -61,3 +61,21 @@ test("App 渲染：流式草稿 + 等待批准面板都显示", () => {
 	assert.ok(output.includes("等待批准"), "应渲染等待批准面板");
 	assert.ok(output.includes("run_code"), "批准面板应含工具名");
 });
+
+test("App 渲染：工具卡片显示名称 + 状态徽标", () => {
+	const conv = fakeConv();
+	conv.state.tools = [
+		{ seq: 5, callId: "c1", name: "run_code", args: '{"code":"1+1"}', status: "running" },
+		{ seq: 6, callId: "c2", name: "read", args: '{"path":"a.txt"}', status: "done" }
+	];
+	const output = renderToString(
+		React.createElement(App, {
+			conv,
+			session: { sessionId: "session-abcdef123456", agentPreset: "code", cwd: "C:\\work" },
+			onCommand: () => {},
+			onExit: () => {}
+		})
+	);
+	assert.ok(output.includes("run_code"), "工具卡片应显示工具名");
+	assert.ok(output.includes("read"), "工具卡片应显示工具名");
+});

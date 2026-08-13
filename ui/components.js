@@ -133,6 +133,34 @@ export function PendingApprovals({ approvals }) {
 	);
 }
 
+/** 工具卡片：把最近的工具调用渲染成折叠卡片（名称 + 状态 + 参数摘要）。 */
+export function ToolCards({ tools, limit = 5 }) {
+	if (!tools || tools.length === 0) return null;
+	const recent = tools.slice(-limit);
+	const rows = recent.map((t) => {
+		let badge, color;
+		if (t.status === "running") {
+			badge = "◐"; color = "cyan";
+		} else if (t.status === "error") {
+			badge = "✗"; color = "red";
+		} else {
+			badge = "✓"; color = "green";
+		}
+		return h(
+			Box,
+			{ key: t.callId, paddingX: 1 },
+			h(Text, { color, bold: true }, `${badge} `),
+			h(Text, { bold: true }, `${t.name}`),
+			t.args ? h(Text, { dim: true }, `  ${t.args}`) : null
+		);
+	});
+	return h(
+		Box,
+		{ flexDirection: "column" },
+		...rows
+	);
+}
+
 /**
  * 主 App 组件。
  * @param {object} props
@@ -295,6 +323,7 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 				: null
 		),
 		h(PendingApprovals, { approvals: snapshot.pendingApprovals }),
+		h(ToolCards, { tools: snapshot.tools }),
 		h(SlashPanel, { panel: slashPanel }),
 		h(Notice, { notice: snapshot.notice }),
 		h(CommandInput, { vim })
