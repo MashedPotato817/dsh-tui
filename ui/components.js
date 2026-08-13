@@ -15,7 +15,7 @@ import { processInput } from "../lib/bridge.js";
 import { nextMode, modeBadge, modeColor } from "../lib/permission.js";
 
 /** HUD 一行：`● model | PTC | ⏸ manual | $0.12 | 1.2ki/3o | sessionId cwd` */
-export function HUD({ hud }) {
+export function HUD({ hud, uiMode }) {
 	const cost = formatCost(hud.costUsd);
 	const running = hud.running ? "●" : "○";
 	const tok =
@@ -23,11 +23,13 @@ export function HUD({ hud }) {
 	const ctx = hud.contextPct !== null && hud.contextPct !== undefined
 		? ` | ctx ${hud.contextPct}%`
 		: "";
+	const modeStr = uiMode ? ` | ${uiMode}` : "";
 	return h(
 		Box,
 		{ borderStyle: "single", borderColor: "gray", paddingX: 1 },
 		h(Text, { color: "cyan", bold: true }, ` ${running} ${hud.model} | ${hud.mode}`),
 		h(Text, { color: hud.permColor || "gray", bold: true }, ` ${hud.permBadge || "⏸ manual"} `),
+		h(Text, { color: "magenta", bold: uiMode === "APPROVE" }, `${modeStr}`),
 		h(Text, { color: "dim" }, `${cost ? ` | ${cost}` : ""} | ${tok}t${ctx}`),
 		h(Box, { marginLeft: 1 }, h(Text, { color: "dim" }, ` ${hud.sessionId} ${hud.cwd || ""}`))
 	);
@@ -412,11 +414,12 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 
 	const text = submitText(vim);
 	const slashPanel = buildSlashPanel(text, allCommandsFn(customCommands), { active: slashActive });
+	const uiMode = modeLabel(deriveMode(snapshot, { showHelp }));
 
 	return h(
 		Box,
 		{ flexDirection: "column", height: "100%" },
-		h(HUD, { hud }),
+		h(HUD, { hud, uiMode }),
 		// 落定历史用 <Static>（永不重绘）；live 尾（pending/注入/流式草稿）用常规重绘区。
 		h(SettledList, { messages: snapshot.messages }),
 		h(Box, { flexDirection: "column", flexGrow: 1, minHeight: 2 },
@@ -440,3 +443,4 @@ import { allCommands as allCommandsFn } from "../lib/commands.js";
 import { loadCustomCommands } from "../lib/command-loader.js";
 import { createHistory, pushHistory, navigateHistory } from "../lib/history.js";
 import { diffLinesFrom, classifyDiffLines, diffStats, diffSummary } from "../lib/diff.js";
+import { deriveMode, modeLabel } from "../lib/ui-mode.js";

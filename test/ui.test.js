@@ -106,3 +106,17 @@ test("HelpPanel：渲染快捷键列表", () => {
 	assert.ok(output.includes("Ctrl+C"), "应含中断提示");
 	assert.ok(output.includes("Shift+Tab"), "应含权限档位提示");
 });
+
+test("App 渲染：UI Mode 标签显示在 HUD（审批时 APPROVE）", () => {
+	const conv = fakeConv();
+	conv.state.pendingApprovals = [{ approvalId: "ap-1", toolName: "write" }];
+	const output = renderToString(
+		React.createElement(App, {
+			conv,
+			session: { sessionId: "session-abcdef123456", agentPreset: "code", cwd: "C:\\work" },
+			onCommand: () => {},
+			onExit: () => {}
+		})
+	);
+	assert.ok(output.includes("APPROVE"), "有挂起审批时 HUD 应显示 APPROVE mode");
+});

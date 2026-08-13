@@ -26,7 +26,8 @@ const SETS = {
 		"test/command-loader.test.js",
 		"test/config.test.js",
 		"test/history.test.js",
-		"test/diff.test.js"
+		"test/diff.test.js",
+		"test/ui-mode.test.js"
 	],
 	"test-live": ["test-live/ptc.smoke.test.js", "test-live/stream.smoke.test.js", "test-live/resume.smoke.test.js"]
 };
