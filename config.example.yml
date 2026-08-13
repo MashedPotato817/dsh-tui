@@ -1,0 +1,29 @@
+# dsh-tui 配置示例 —— 复制到 ~/.dsh/dsh-tui.yml 使用
+#
+# 本项目非叶文档：dsh-tui 读取 ~/.dsh/dsh-tui.yml，无该文件时全部用默认值。
+# 参考：OpenCode(.opencode.json) / Codex(config.toml) 的「可配置默认」理念。
+
+# 审批模式：interactive（有工具调用时弹卡片让你选，推荐）| auto（按权限档位自动应答）
+approvalMode: interactive
+
+# 默认权限档位：manual | plan | acceptEdits | bypassPermissions
+#   manual           每步审批都弹卡片（保守）
+#   acceptEdits      自动放行下面 editableTools 列的编辑工具
+#   bypassPermissions 放行下面 allowTools 列的白名单工具
+defaultPermissionMode: manual
+
+# acceptEdits 档自动放行的编辑工具（工具名列表）
+editableTools: []
+
+# bypass 档放行的工具白名单
+allowTools: []
+
+# 覆盖价格表（USD / 百万 token），缺省用内置 deepseek 价格
+# prices:
+#   deepseek-chat:
+#     input: 0.27
+#     cacheRead: 0.07
+#     output: 1.1
+
+# 额外自定义命令目录（默认还扫 .claude/commands 与 ~/.claude/commands）
+# customCommandsDirs: ["/path/to/commands"]
