@@ -203,3 +203,24 @@ test("backspace / delete / 方向键在 insert 下工作", () => {
 	state = vimKey(state, "end").state;
 	assert.equal(state.cursor.col, 3);
 });
+
+test("多行输入：Shift+Enter / Ctrl+J 在 insert 光标处切行，Enter 才提交", () => {
+	let state = createVim();
+	state = vimKey(state, "i").state;
+	state = typeKeys(state, ["a", "b", "c"]);
+	// 光标移到 b|c 之间，shift-enter 切行
+	state = vimKey(state, "left").state; // col 2（c 前）
+	const r1 = vimKey(state, "shift-enter");
+	assert.equal(r1.action, "none", "shift-enter 不应提交");
+	assert.deepEqual(r1.state.lines, ["ab", "c"], "应在光标处切行");
+	assert.equal(submitText(r1.state), "ab\nc");
+
+	// Ctrl+J 也在新行尾再切（等效）
+	const r2 = vimKey(r1.state, "ctrl-j");
+	assert.deepEqual(r2.state.lines, ["ab", "", "c"], "ctrl-j 追加一空行");
+
+	// Enter 仍提交
+	const submit = vimKey(r2.state, "enter");
+	assert.equal(submit.action, "submit");
+	assert.equal(submitText(submit.state), "ab\n\nc");
+});
