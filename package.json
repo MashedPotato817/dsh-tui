@@ -23,10 +23,14 @@
     "node": ">=20"
   },
   "scripts": {
-    "check": "node --check lib/index.js && node --check lib/client.js && node --check lib/fold.js && node --check lib/session.js && node --check bin/tui.js",
-    "test": "node --test test/fold.test.js test/session.test.js test/client.test.js",
+    "check": "node --check lib/index.js && node --check lib/client.js && node --check lib/fold.js && node --check lib/session.js && node --check lib/stream.js && node --check lib/live.js && node --check lib/vim.js && node --check lib/hud.js && node --check bin/tui.js",
+    "test": "node --test test/fold.test.js test/session.test.js test/client.test.js test/stream.test.js test/live.test.js test/vim.test.js test/hud.test.js",
     "test:live": "node scripts/run-live.mjs",
     "flywheel": "node scripts/flywheel.mjs test",
     "flywheel:live": "node scripts/flywheel.mjs test-live"
+  },
+  "dependencies": {
+    "ink": "^7.1.1",
+    "react": "^19.2.8"
   }
 }

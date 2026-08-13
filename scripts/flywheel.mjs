@@ -10,7 +10,15 @@
 import { spawn } from "node:child_process";
 
 const SETS = {
-	test: ["test/fold.test.js", "test/session.test.js", "test/client.test.js"],
+	test: [
+		"test/fold.test.js",
+		"test/session.test.js",
+		"test/client.test.js",
+		"test/stream.test.js",
+		"test/live.test.js",
+		"test/vim.test.js",
+		"test/hud.test.js"
+	],
 	"test-live": ["test-live/ptc.smoke.test.js"]
 };
 

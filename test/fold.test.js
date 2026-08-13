@@ -19,7 +19,8 @@ test("空页折叠为空视图", () => {
 		tools: [],
 		turn: 0,
 		lastTurnEnd: null,
-		lastSeq: -1
+		lastSeq: -1,
+		model: null
 	});
 });
 
