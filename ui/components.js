@@ -7,7 +7,7 @@
  */
 import { createElement as h } from "react";
 import { useState, useEffect } from "react";
-import { Box, Text, useInput } from "ink";
+import { Box, Text, useInput, Static } from "ink";
 import { hudState, formatCost } from "../lib/hud.js";
 import { buildSlashPanel } from "../lib/slash.js";
 import { createVim, submitText } from "../lib/vim.js";
@@ -60,21 +60,22 @@ function MessageRow({ message }) {
 }
 
 export function ConversationList({ messages, streaming }) {
-	const rows = messages.map((m, i) => h(MessageRow, { key: i, message: m }));
+	// live 尾（pending 乐观行 / 注入上下文 / 流式草稿）用常规重绘区。
+	const live = messages.filter((m) => m.pending || m.injected);
+	const rows = live.map((m, i) => h(MessageRow, { key: i, message: m }));
 	if (streaming && streaming.text) {
-		rows.push(
-			h(
-				Box,
-				{ key: "stream" },
-				h(Text, { dim: true, color: "magenta" }, "◉ "),
-				h(Text, { dim: true }, String(streaming.text))
-			)
-		);
-	}
-	if (rows.length === 0) {
-		rows.push(h(Text, { key: "empty", dim: true }, "( 空会话 — 按 i 输入，Enter 发送，/ 命令 )"));
+		rows.push(h(Box, { key: "stream" }, h(Text, { dim: true, color: "magenta" }, "◉ "), h(Text, { dim: true }, String(streaming.text))));
 	}
 	return h(Box, { flexDirection: "column" }, ...rows);
+}
+
+/** 落定历史的 <Static> 区：每行稳定 key=seq，新增才渲染。 */
+export function SettledList({ messages }) {
+	const settled = messages.filter((m) => typeof m.seq === "number" && m.seq >= 0 && !m.injected);
+	return h(Static, {
+		items: settled,
+		children: (m) => h(MessageRow, { key: m.seq, message: m })
+	});
 }
 
 export function SlashPanel({ panel }) {
@@ -157,6 +158,13 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 	const hud = hudState({ view: snapshot, session: liveSession });
 
 	useInput((input, key) => {
+		// Claude Code 式中断：回合运行中按 Esc 直接停止生成，而不是只在模式间切换。
+		// 仅当正在运行（流式/思考）时 Esc 触发取消；空闲时 Esc 仍是退出 insert 的常规键。
+		if (key.escape && snapshot.running) {
+			conv.cancelTurn();
+			return;
+		}
+
 		const result = processInput(vim, input, key);
 		setVim(result.state);
 
@@ -184,7 +192,14 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		Box,
 		{ flexDirection: "column", height: "100%" },
 		h(HUD, { hud }),
-		h(Box, { flexDirection: "column", flexGrow: 1, minHeight: 4 }, ConversationList({ messages: snapshot.messages, streaming: snapshot.streaming })),
+		// 落定历史用 <Static>（永不重绘）；live 尾（pending/注入/流式草稿）用常规重绘区。
+		h(SettledList, { messages: snapshot.messages }),
+		h(Box, { flexDirection: "column", flexGrow: 1, minHeight: 2 },
+			ConversationList({ messages: snapshot.messages, streaming: snapshot.streaming }),
+			snapshot.messages.length === 0 && !(snapshot.streaming && snapshot.streaming.text)
+				? h(Text, { key: "empty", dim: true }, "( 空会话 — 按 i 输入，Enter 发送，/ 命令 )")
+				: null
+		),
 		h(PendingApprovals, { approvals: snapshot.pendingApprovals }),
 		h(SlashPanel, { panel: slashPanel }),
 		h(Notice, { notice: snapshot.notice }),
