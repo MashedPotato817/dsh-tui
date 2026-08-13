@@ -24,6 +24,9 @@ live 测试默认跳过（需要 `DSH_TEST_LIVE=1`），由脚本自动注入；
 - `test-live/` live 飞轮（3 例）：PTC 全链路、真实 mux 流式、会话恢复历史。
 - 里程碑 5 新增：question/approval 自动应答（安全默认：拒绝工具、decline 计划）、
   `:cancel` 停回合、`switchSession` 切换会话、SIGINT 优雅关闭。
+- `npm run smoke:interactive`：用 node-pty 在真实 pseudo-terminal 里跑整条交互
+  TUI（Ink 渲染 → Vim insert 输入 → 发送 → 收到流式回复），验证最后的 TTY 盲区。
+  node-pty 是 devDependency，CI 不跑此脚本（需真实 host + 原生 PTY）。
 
 ## PTC 模式是什么
 
