@@ -141,6 +141,17 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 	const [liveSession, setLiveSession] = useState(() => (getSession ? getSession() : session));
 	// Ctrl+C 双按退出计时（Claude Code 安全退出双保险）
 	const lastCtrlC = useRef(0);
+	// 自定义命令（.claude/commands/*.md）
+	const [customCommands, setCustomCommands] = useState([]);
+
+	useEffect(() => {
+		try {
+			setCustomCommands(loadCustomCommands({ projectDir: liveSession.cwd || session.cwd }));
+		} catch {
+			setCustomCommands([]);
+		}
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, []);
 
 	useEffect(() => {
 		conv.onState = (state) => setSnapshot({ ...state });
@@ -203,7 +214,7 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		const currentText = submitText(vim);
 		// slash 命令面板导航：输入以 / 开头且命中命令时，Tab/方向键循环选择，
 		// Enter/Tab 选中执行（Claude Code 式可发现性补全）。
-		const activePanel = buildSlashPanel(currentText, allCmds(), { active: slashActive });
+		const activePanel = buildSlashPanel(currentText, allCommandsFn(customCommands), { active: slashActive });
 		if (activePanel && activePanel.items.length > 0) {
 			if (key.tab && !key.shift) {
 				setSlashActive((a) => (a + 1) % activePanel.items.length);
@@ -225,7 +236,7 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		if (result.action === "submit") {
 			const text = submitText(result.state);
 			// slash 面板可见时 Enter 选中当前命令执行
-			const panel = buildSlashPanel(text, allCmds(), { active: slashActive });
+			const panel = buildSlashPanel(text, allCommandsFn(customCommands), { active: slashActive });
 			if (panel && panel.items.length > 0 && text.startsWith("/")) {
 				const item = panel.items[slashActive % panel.items.length];
 				if (item.name) onCommand(item.name);
@@ -247,7 +258,7 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 	});
 
 	const text = submitText(vim);
-	const slashPanel = buildSlashPanel(text, allCmds(), { active: slashActive });
+	const slashPanel = buildSlashPanel(text, allCommandsFn(customCommands), { active: slashActive });
 
 	return h(
 		Box,
@@ -268,5 +279,6 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 	);
 }
 
-// 合并 builtin + local 命令供 slash 面板展示
-import { allCommands as allCmds } from "../lib/commands.js";
+// slash 面板命令源：内置 + 本地 + 自定义
+import { allCommands as allCommandsFn } from "../lib/commands.js";
+import { loadCustomCommands } from "../lib/command-loader.js";
