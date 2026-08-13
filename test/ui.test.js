@@ -79,3 +79,22 @@ test("App 渲染：工具卡片显示名称 + 状态徽标", () => {
 	assert.ok(output.includes("run_code"), "工具卡片应显示工具名");
 	assert.ok(output.includes("read"), "工具卡片应显示工具名");
 });
+
+test("App 渲染：队列 Dock 显示待处理消息", () => {
+	const conv = fakeConv();
+	conv.state.queue = [
+		{ id: "mq-1", placement: "queued", message: { content: [{ type: "text", text: "排队任务一" }] } },
+		{ id: "mq-2", placement: "steering", message: { content: [{ type: "text", text: "插队引导" }] } }
+	];
+	const output = renderToString(
+		React.createElement(App, {
+			conv,
+			session: { sessionId: "session-abcdef123456", agentPreset: "code", cwd: "C:\\work" },
+			onCommand: () => {},
+			onExit: () => {}
+		})
+	);
+	assert.ok(output.includes("待处理队列"), "应渲染队列面板标题");
+	assert.ok(output.includes("排队任务一"), "应显示排队消息文本");
+	assert.ok(output.includes("插队引导"), "应显示 steering 消息");
+});

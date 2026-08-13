@@ -164,6 +164,30 @@ export function ToolCards({ tools, limit = 5 }) {
 	);
 }
 
+/** 消息队列 Dock（Codex/OpenCode 队列面板）：展示排队中的待处理消息。 */
+export function QueueDock({ queue }) {
+	if (!queue || queue.length === 0) return null;
+	const textOf = (message) =>
+		(message.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
+	const rows = queue.map((item) => {
+		const preview = textOf(item.message);
+		const clipped = preview.length > 60 ? preview.slice(0, 60) + "…" : preview;
+		const tag = item.placement === "steering" ? "▸" : "◷";
+		return h(
+			Box,
+			{ key: item.id, paddingX: 1 },
+			h(Text, { dim: true }, `${tag} `),
+			h(Text, { dim: true }, clipped || "(无文本)")
+		);
+	});
+	return h(
+		Box,
+		{ borderStyle: "round", borderColor: "cyan", flexDirection: "column" },
+		h(Text, { bold: true, color: "cyan" }, " 待处理队列"),
+		...rows
+	);
+}
+
 /**
  * 主 App 组件。
  * @param {object} props
@@ -327,6 +351,7 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		),
 		h(PendingApprovals, { approvals: snapshot.pendingApprovals }),
 		h(ToolCards, { tools: snapshot.tools }),
+		h(QueueDock, { queue: snapshot.queue }),
 		h(SlashPanel, { panel: slashPanel }),
 		h(Notice, { notice: snapshot.notice }),
 		h(CommandInput, { vim })
