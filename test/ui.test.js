@@ -3,10 +3,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderToString } from "ink";
 import React from "react";
-import App from "../ui/components.js";
+import App, { HelpPanel } from "../ui/components.js";
 import { initialState } from "../lib/live.js";
 import { hudState } from "../lib/hud.js";
-
 // 提供一个假 conv 让 App 的 useEffect 不碰网络
 function fakeConv() {
 	const state = { ...initialState(), messages: [
@@ -97,4 +96,12 @@ test("App 渲染：队列 Dock 显示待处理消息", () => {
 	assert.ok(output.includes("待处理队列"), "应渲染队列面板标题");
 	assert.ok(output.includes("排队任务一"), "应显示排队消息文本");
 	assert.ok(output.includes("插队引导"), "应显示 steering 消息");
+});
+
+test("HelpPanel：渲染快捷键列表", () => {
+	const output = renderToString(React.createElement(HelpPanel, {}));
+	assert.ok(output.includes("快捷键"), "面板标题");
+	assert.ok(output.includes("Shift+Enter"), "应含多行输入提示");
+	assert.ok(output.includes("Ctrl+C"), "应含中断提示");
+	assert.ok(output.includes("Shift+Tab"), "应含权限档位提示");
 });

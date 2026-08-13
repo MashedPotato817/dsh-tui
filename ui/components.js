@@ -164,9 +164,32 @@ export function ToolCards({ tools, limit = 5 }) {
 	);
 }
 
+/** 快捷键帮助面板（`?` 触发，Claude Code 心智模型）。 */
+export function HelpPanel() {
+	const rows = [
+		["i / A / o", "进入 insert 输入"],
+		["ESC", "退出 insert / 中断回合"],
+		["Enter", "发送"],
+		["Shift+Enter / Ctrl+J", "多行输入换行"],
+		[":", "命令模式（:w 提交 :cancel 停止 :q 退出）"],
+		["/", "斜杠命令"],
+		["Shift+Tab", "权限档位"],
+		["Ctrl+C", "中断（运行中）/ 双按退出"],
+		["?", "此帮助"],
+		["y / Y / n", "审批：允许一次 / 本会话 / 拒绝"]
+	].map(([k, v]) =>
+		h(Box, { key: k, paddingX: 1 }, h(Text, { bold: true, color: "cyan" }, ` ${k}`), h(Text, { dim: true }, `  ${v}`))
+	);
+	return h(
+		Box,
+		{ borderStyle: "round", borderColor: "blue", flexDirection: "column" },
+		h(Text, { bold: true, color: "blue" }, " 快捷键"),
+		...rows
+	);
+}
+
 /** 消息队列 Dock（Codex/OpenCode 队列面板）：展示排队中的待处理消息。 */
-export function QueueDock({ queue }) {
-	if (!queue || queue.length === 0) return null;
+export function QueueDock({ queue }) {	if (!queue || queue.length === 0) return null;
 	const textOf = (message) =>
 		(message.content || []).filter((b) => b.type === "text").map((b) => b.text).join("");
 	const rows = queue.map((item) => {
@@ -204,6 +227,8 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 	const lastCtrlC = useRef(0);
 	// 自定义命令（.claude/commands/*.md）
 	const [customCommands, setCustomCommands] = useState([]);
+	// 快捷键帮助面板（`?` 空输入触发，Claude Code 心智模型）
+	const [showHelp, setShowHelp] = useState(false);
 
 	useEffect(() => {
 		try {
@@ -234,6 +259,15 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 	const hud = hudState({ view: snapshot, session: liveSession });
 
 	useInput((input, key) => {
+		// `?`（normal 模态）切换快捷键帮助面板（Claude Code 心智模型）。
+		if (input === "?" && vim.mode === "normal") {
+			setShowHelp((s) => !s);
+			return;
+		}
+		if (showHelp && key.escape) {
+			setShowHelp(false);
+			return;
+		}
 		// 审批交互：有挂起批准时，y/Y/n 处理第一个（Claude Code/Codex 式审批卡片）。
 		if (snapshot.pendingApprovals && snapshot.pendingApprovals.length > 0 && !key.ctrl) {
 			const pending = snapshot.pendingApprovals[0];
@@ -349,6 +383,7 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 				? h(Text, { key: "empty", dim: true }, "( 空会话 — 按 i 输入，Enter 发送，/ 命令 )")
 				: null
 		),
+		showHelp ? h(HelpPanel, {}) : null,
 		h(PendingApprovals, { approvals: snapshot.pendingApprovals }),
 		h(ToolCards, { tools: snapshot.tools }),
 		h(QueueDock, { queue: snapshot.queue }),
