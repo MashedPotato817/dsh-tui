@@ -44,3 +44,20 @@ test("hudState + renderToString：流式草稿渲染", () => {
 	assert.equal(hud.mode, "PTC");
 	assert.equal(hud.running, true);
 });
+
+test("App 渲染：流式草稿 + 等待批准面板都显示", () => {
+	const conv = fakeConv();
+	conv.state.streaming = { text: "正在生成回复…" };
+	conv.state.pendingApprovals = [{ approvalId: "ap-1", toolName: "run_code" }];
+	const output = renderToString(
+		React.createElement(App, {
+			conv,
+			session: { sessionId: "session-abcdef123456", agentPreset: "code", cwd: "C:\\work" },
+			onCommand: () => {},
+			onExit: () => {}
+		})
+	);
+	assert.ok(output.includes("正在生成回复"), "应渲染流式草稿");
+	assert.ok(output.includes("等待批准"), "应渲染等待批准面板");
+	assert.ok(output.includes("run_code"), "批准面板应含工具名");
+});
