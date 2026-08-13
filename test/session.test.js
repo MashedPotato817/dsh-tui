@@ -1,0 +1,171 @@
+// 单元飞轮：Session 模型 —— 用 FakeHost 替身模拟 host，不碰网络、不调真实模型。
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { Session, PTC_PRESET } from "../lib/session.js";
+
+/**
+ * 内存版 host 替身：实现 request(method, payload)。
+ * prompt 后异步长出完整的一轮事件（turn/start → user/message →
+ * assistant/message → turn/end），与真实 host 的时序一致。
+ */
+class FakeHost {
+	constructor({ autoEnd = true, endReason = { kind: "completed" }, turnDelayMs = 15 } = {}) {
+		this.autoEnd = autoEnd;
+		this.endReason = endReason;
+		this.turnDelayMs = turnDelayMs;
+		this.sessionId = "session-fake";
+		this.turn = 0;
+		this.events = [];
+		this.requestLog = [];
+	}
+
+	#push(type, data) {
+		this.events.push({
+			type,
+			seq: this.events.length,
+			time: 1_700_000_000_000 + this.events.length,
+			data
+		});
+	}
+
+	#spawnTurn(text) {
+		setTimeout(() => {
+			this.turn += 1;
+			this.#push("turn/start", { turn: this.turn });
+			this.#push("user/message", {
+				source: { kind: "user" },
+				content: [{ type: "text", text }]
+			});
+			this.#push("assistant/message", {
+				turn: this.turn,
+				step: 0,
+				message: {
+					id: `m-${this.turn}`,
+					role: "assistant",
+					content: [{ type: "text", text: `回答 ${this.turn}` }],
+					source: { kind: "model" }
+				},
+				usage: { inputTokens: 5, outputTokens: 2 }
+			});
+			this.#push("turn/end", { turn: this.turn, reason: this.endReason });
+		}, this.turnDelayMs);
+	}
+
+	async request(method, payload) {
+		this.requestLog.push({ method, payload });
+		switch (method) {
+			case "session.create":
+				this.sessionId = payload.sessionId ?? "session-fake";
+				this.events = [];
+				return { sessionId: this.sessionId, agentPreset: payload.agentPreset ?? null };
+			case "session.list":
+				return {
+					items: [
+						{
+							sessionId: "session-fake",
+							blank: true,
+							running: false,
+							updatedAt: 1,
+							agentPreset: "code",
+							cwd: "C:\\work"
+						}
+					]
+				};
+			case "session.history":
+				return { events: this.events.map((event) => ({ event })), hasMore: false };
+			case "session.prompt":
+				if (this.autoEnd) this.#spawnTurn(payload.content[0].text);
+				return { accepted: true };
+			default:
+				throw new Error(`unexpected method: ${method}`);
+		}
+	}
+}
+
+test("Session.create 默认走 PTC 模式（agentPreset=code）并透传 cwd", async () => {
+	const host = new FakeHost();
+	const session = await Session.create(host, { cwd: "C:\\work" });
+	assert.equal(session.sessionId, "session-fake");
+	assert.equal(session.agentPreset, PTC_PRESET);
+	const createCall = host.requestLog.find((r) => r.method === "session.create");
+	assert.equal(createCall.payload.agentPreset, "code");
+	assert.equal(createCall.payload.cwd, "C:\\work");
+});
+
+test("Session.create 允许显式覆盖 agentPreset", async () => {
+	const host = new FakeHost();
+	const session = await Session.create(host, { agentPreset: "standard" });
+	assert.equal(session.agentPreset, "standard");
+});
+
+test("Session.open 复用已存在会话；找不到抛 session-not-found", async () => {
+	const host = new FakeHost();
+	const session = await Session.open(host, "session-fake");
+	assert.equal(session.sessionId, "session-fake");
+	assert.equal(session.agentPreset, "code");
+
+	await assert.rejects(() => Session.open(host, "session-missing"), (error) => {
+		assert.equal(error.code, "session-not-found");
+		return true;
+	});
+});
+
+test("converse：prompt → 轮询 → 折叠出 user + assistant 回复，turn completed", async () => {
+	const host = new FakeHost({ turnDelayMs: 10 });
+	const session = await Session.create(host);
+	const view = await session.converse("你好", { timeoutMs: 2000, pollMs: 5 });
+
+	assert.equal(view.accepted, true);
+	assert.equal(view.turnEnd.reason.kind, "completed");
+	const texts = view.messages.map((m) => m.text);
+	assert.deepEqual(texts, ["你好", "回答 1"]);
+	assert.equal(view.messages[1].usage.outputTokens, 2);
+});
+
+test("converse 复用时只认 prompt 之后的新轮（不把旧轮当本轮）", async () => {
+	const host = new FakeHost({ turnDelayMs: 10 });
+	const session = await Session.create(host);
+	// 第一轮：完整走完
+	const first = await session.converse("第一问", { timeoutMs: 2000, pollMs: 5 });
+	assert.equal(first.turnEnd.turn, 1);
+	// 第二轮：基线后应出现 turn=2 的新轮
+	const second = await session.converse("第二问", { timeoutMs: 2000, pollMs: 5 });
+	assert.equal(second.turnEnd.turn, 2);
+	assert.deepEqual(second.messages.map((m) => m.text), ["第一问", "回答 1", "第二问", "回答 2"]);
+});
+
+test("converse 以 error 结束 → 抛 turn-error", async () => {
+	const host = new FakeHost({
+		turnDelayMs: 10,
+		endReason: { kind: "error", error: { message: "model blew up", code: "LLM" } }
+	});
+	const session = await Session.create(host);
+	await assert.rejects(() => session.converse("hi", { timeoutMs: 2000, pollMs: 5 }), (error) => {
+		assert.equal(error.code, "turn-error");
+		assert.match(error.message, /model blew up/);
+		return true;
+	});
+});
+
+test("converse 超时 → 抛 turn-timeout", async () => {
+	const host = new FakeHost({ autoEnd: false });
+	const session = await Session.create(host);
+	await assert.rejects(() => session.converse("hi", { timeoutMs: 60, pollMs: 10 }), (error) => {
+		assert.equal(error.code, "turn-timeout");
+		return true;
+	});
+});
+
+test("converse 收到 slash 命令 → 返回 command 且不等待回合", async () => {
+	const host = new FakeHost({ autoEnd: false });
+	const session = await Session.create(host);
+	// 让 host 替身像真实 host 一样返回 command 槽
+	const originalRequest = host.request.bind(host);
+	host.request = async (method, payload) => {
+		if (method === "session.prompt") return { accepted: true, command: { kind: "success", text: "ok" } };
+		return originalRequest(method, payload);
+	};
+	const view = await session.converse("/status", { timeoutMs: 200 });
+	assert.equal(view.command.kind, "success");
+	assert.equal(view.turnEnd, null); // 没有等待回合
+});
