@@ -1,0 +1,29 @@
+{
+  "name": "dsh-tui",
+  "version": "0.1.0",
+  "description": "Terminal client for DeepSeek Harness: a TUI over the DSH client contract (ctx.remote)",
+  "type": "module",
+  "main": "lib/index.js",
+  "bin": {
+    "dsh-tui": "bin/tui.js"
+  },
+  "files": [
+    "lib",
+    "bin"
+  ],
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "tui",
+    "terminal",
+    "cli"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "check": "node --check lib/index.js",
+    "test": "node --test"
+  }
+}
