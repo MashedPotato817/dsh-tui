@@ -144,3 +144,25 @@ test("turn/end error 被记录进 lastTurnEnd", () => {
 	]);
 	assert.equal(view.lastTurnEnd.reason.kind, "error");
 });
+
+test("user/message 按 source.kind 区分人工输入与注入上下文", () => {
+	const human = foldEvents([
+		{ event: event("user/message", { source: { kind: "user" }, content: [{ type: "text", text: "人工输入" }] }) }
+	]);
+	assert.equal(human.messages[0].injected, undefined, "人工输入不标记 injected");
+
+	const noSource = foldEvents([
+		{ event: event("user/message", { content: [{ type: "text", text: "无 source" }] }) }
+	]);
+	assert.equal(noSource.messages[0].injected, undefined, "无 source 当作普通用户消息");
+
+	const plugin = foldEvents([
+		{ event: event("user/message", { source: { kind: "plugin", plugin: "x" }, content: [{ type: "text", text: "运行时上下文" }] }) }
+	]);
+	assert.equal(plugin.messages[0].injected, true, "plugin 上下文标记 injected");
+
+	const agentPrefix = foldEvents([
+		{ event: event("user/message", { source: { kind: "agent-instructions" }, content: [{ type: "text", text: "工作区指令" }] }) }
+	]);
+	assert.equal(agentPrefix.messages[0].injected, true, "agent-instructions 标记 injected");
+});

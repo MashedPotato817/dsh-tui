@@ -29,8 +29,20 @@ export function HUD({ hud }) {
 }
 
 function MessageRow({ message }) {
-	const { role, text, pending } = message;
+	const { role, text, pending, injected } = message;
 	const body = String(text || "");
+	// 注入上下文（agent-instructions / plugin 的运行时说明）不是日常对话，
+	// 弱化显示并折叠成一行，避免污染会话视图。
+	if (injected) {
+		const oneLine = body.replace(/\s+/g, " ").trim();
+		if (!oneLine) return null;
+		const clipped = oneLine.length > 60 ? oneLine.slice(0, 60) + "…" : oneLine;
+		return h(
+			Box,
+			{ key: undefined },
+			h(Text, { dim: true, color: "gray" }, `· ${clipped}`)
+		);
+	}
 	if (role === "user") {
 		return h(
 			Box,
