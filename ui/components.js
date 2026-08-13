@@ -229,6 +229,8 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 	const [customCommands, setCustomCommands] = useState([]);
 	// 快捷键帮助面板（`?` 空输入触发，Claude Code 心智模型）
 	const [showHelp, setShowHelp] = useState(false);
+	// 命令历史（normal 模态 j/k 翻历史）
+	const [history, setHistory] = useState(() => createHistory());
 
 	useEffect(() => {
 		try {
@@ -266,6 +268,16 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		}
 		if (showHelp && key.escape) {
 			setShowHelp(false);
+			return;
+		}
+		// 命令历史：normal 模态下 j=上一条 / k=下一条（readline 式翻历史）。
+		if (vim.mode === "normal" && (input === "j" || input === "k")) {
+			const r = navigateHistory(history, input === "j" ? "up" : "down", submitText(vim));
+			setHistory(r.history);
+			if (r.text !== null) {
+				// 用历史文本填充单行输入
+				setVim({ ...vim, lines: [r.text], cursor: { row: 0, col: String(r.text).length }, pending: "" });
+			}
 			return;
 		}
 		// 审批交互：有挂起批准时，y/Y/n 处理第一个（Claude Code/Codex 式审批卡片）。
@@ -354,6 +366,7 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 				return;
 			}
 			if (text.trim()) {
+				setHistory((h) => pushHistory(h, text));
 				conv.send(text).catch(() => {});
 			}
 		} else if (result.action === "run-command") {
@@ -396,3 +409,4 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 // slash 面板命令源：内置 + 本地 + 自定义
 import { allCommands as allCommandsFn } from "../lib/commands.js";
 import { loadCustomCommands } from "../lib/command-loader.js";
+import { createHistory, pushHistory, navigateHistory } from "../lib/history.js";
