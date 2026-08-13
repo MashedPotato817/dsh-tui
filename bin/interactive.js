@@ -8,6 +8,7 @@ import { Session } from "../lib/session.js";
 import { LiveConversation } from "../lib/live.js";
 import App from "../ui/components.js";
 import { routeSlash } from "../lib/commands.js";
+import { loadConfig, configToRuntime } from "../lib/config.js";
 import { writeRecent } from "../lib/registry.js";
 
 /**
@@ -30,7 +31,15 @@ export async function startInteractive({ baseUrl, sessionId, preset, cwd, mode =
 	let session = await initialSession(client, { sessionId, mode, preset, cwd });
 	writeRecent(session.sessionId, { cwd: session.cwd, agentPreset: session.agentPreset });
 
-	const conv = new LiveConversation({ client, session });
+	// 应用 dsh-tui 配置（~/.dsh/dsh-tui.yml）：默认审批模式/权限档位/编辑工具白名单。
+	const cfg = configToRuntime(loadConfig());
+	const conv = new LiveConversation({
+		client,
+		session,
+		approvalMode: cfg.approvalMode,
+		policy: { editableTools: cfg.editableTools, allowTools: cfg.allowTools }
+	});
+	conv.setPermissionMode(cfg.permissionMode);
 
 	const onCommand = async (cmdText) => {
 		// cmdText 已是去掉 / 的剩余（或要带 /？）—— UI 传完整输入更好，这里直接收 name

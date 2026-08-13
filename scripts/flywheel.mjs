@@ -23,7 +23,8 @@ const SETS = {
 		"test/registry.test.js",
 		"test/policy.test.js",
 		"test/permission.test.js",
-		"test/command-loader.test.js"
+		"test/command-loader.test.js",
+		"test/config.test.js"
 	],
 	"test-live": ["test-live/ptc.smoke.test.js", "test-live/stream.smoke.test.js", "test-live/resume.smoke.test.js"]
 };
