@@ -61,7 +61,29 @@
 路径 C（先实测）→ 若官方版本足够好选 B；若要保留 Ink/可复用 core 选 A。
 本机满足它 node 需要（v24）、peer 依赖（rc.6）齐全，可实测。
 
+## 六、实测结论（已验证）
+
+本机执行 `dsh plugin --profile tui add @openguardrails/dsh-tui` **成功**，
+并在真实 PTY 里 `dsh --profile tui` **完整渲染出 TUI**（keyless 阶段）：
+- 顶部 `DEEPSEEK HARNESS` 渐变色 logo + `main-session-<uuid>` 会话标题
+- HUD 状态栏：cwd(带 git 分支 `feat/dsh-tui`) · 模型 `deepseek-v4-pro` · `↑0 ↓0`(token) · `0% context`
+- 输入提示符 `dsh >` + 绿色 prompt 光标
+
+**含义**：
+1. 插件化路线（官方 dsh 插件接缝 + pi-tui）**本机完全可跑**，无需自造。
+2. openguardrails 是"官方历史恢复版"，功能极全，**已是别人做好的成品**。
+3. 我们若重做 Ink 插件版，等于重造轮子，除非要保留可复用 core / Ink 渲染这些官方版没有的点。
+
+## 七、最终抉择点（供用户定夺）
+
+- 既然 openguardrails 已可跑且功能远全：**直接用它**（省力，放弃自研渲染）
+- 或：**在其上做差异化**（加我们的权限档位/可复用 core/VSCode 对接）
+- 或：**仍重做 Ink 插件版**（保留自己逻辑 + Ink + core 复用，工作量最大）
+
+详请结合《terminal-agent-landscape-2026.md》《opencode-ts-tui-reference.md》综合判断。
+
 ## 参考资料
 - openguardrails README：https://github.com/openguardrails/dsh-tui (README.md)
 - cordis.patch.yml（其插件接缝）已在调研时抓取
 - 官方删除 TUI 的 commit `10bb9cbf4a` 已核实
+- npm：https://www.npmjs.com/package/@openguardrails/dsh-tui
