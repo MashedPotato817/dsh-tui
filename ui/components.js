@@ -12,8 +12,9 @@ import { hudState, formatCost } from "../lib/hud.js";
 import { buildSlashPanel } from "../lib/slash.js";
 import { createVim, submitText } from "../lib/vim.js";
 import { processInput } from "../lib/bridge.js";
+import { nextMode, modeBadge, modeColor } from "../lib/permission.js";
 
-/** HUD 一行：`● model | PTC | $0.12 | 1.2ki/3o | sessionId cwd` */
+/** HUD 一行：`● model | PTC | ⏸ manual | $0.12 | 1.2ki/3o | sessionId cwd` */
 export function HUD({ hud }) {
 	const cost = formatCost(hud.costUsd);
 	const running = hud.running ? "●" : "○";
@@ -23,6 +24,7 @@ export function HUD({ hud }) {
 		Box,
 		{ borderStyle: "single", borderColor: "gray", paddingX: 1 },
 		h(Text, { color: "cyan", bold: true }, ` ${running} ${hud.model} | ${hud.mode}`),
+		h(Text, { color: hud.permColor || "gray", bold: true }, ` ${hud.permBadge || "⏸ manual"} `),
 		h(Text, { color: "dim" }, `${cost ? ` | ${cost}` : ""} | ${tok}t`),
 		h(Box, { marginLeft: 1 }, h(Text, { color: "dim" }, ` ${hud.sessionId} ${hud.cwd || ""}`))
 	);
@@ -158,6 +160,21 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 	const hud = hudState({ view: snapshot, session: liveSession });
 
 	useInput((input, key) => {
+		// Claude Code 式权限档位循环：Shift+Tab（Windows 终端也可 Alt+M）。
+		if (key.shift && key.tab) {
+			const next = nextMode(conv.permissionMode);
+			conv.setPermissionMode(next);
+			conv.state.notice = `权限档位：${modeBadge(next)}（${modeColor(next)}）`;
+			conv.emit();
+			return;
+		}
+		if (key.meta && (input === "m" || input === "M")) {
+			const next = nextMode(conv.permissionMode);
+			conv.setPermissionMode(next);
+			conv.state.notice = `权限档位：${modeBadge(next)}`;
+			conv.emit();
+			return;
+		}
 		// Claude Code 式中断：回合运行中按 Esc 直接停止生成，而不是只在模式间切换。
 		// 仅当正在运行（流式/思考）时 Esc 触发取消；空闲时 Esc 仍是退出 insert 的常规键。
 		if (key.escape && snapshot.running) {
