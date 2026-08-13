@@ -37,6 +37,8 @@ class FakeClient {
 		this.baselineEvents = baselineEvents;
 		this.prompts = [];
 		this.historyCalls = 0;
+		this.responds = [];
+		this.cancelled = false;
 	}
 
 	async request(method, payload) {
@@ -64,7 +66,7 @@ class FakeClient {
 
 const mkEvent = (type, data, seq) => ({ type, seq, time: 1_700_000_000_000 + seq, data });
 
-function setup(baselineEvents = []) {
+function setup(baselineEvents = [], ops = {}) {
 	const client = new FakeClient(baselineEvents);
 	const stream = new FakeStream();
 	const snapshots = [];
@@ -72,6 +74,7 @@ function setup(baselineEvents = []) {
 		client,
 		session: { sessionId: "s1", agentPreset: "code", cwd: "C:\\work", history: (p) => client.request("session.history", p), prompt: (t) => client.request("session.prompt", { content: [{ type: "text", text: t }] }) },
 		stream,
+		approvalMode: ops?.approvalMode,
 		onState: (state) => snapshots.push(state)
 	});
 	return { client, stream, conv, snapshots };
@@ -206,8 +209,8 @@ test("initialState 形状", () => {
 	assert.deepEqual(s.pendingQuestions, []);
 });
 
-test("approval/requested：默认拒绝并 respond，resolved 后清空", async () => {
-	const { conv, stream } = setup();
+test("approval/requested（auto 模式）：自动拒绝并 respond，resolved 后清空", async () => {
+	const { conv, stream } = setup([], { approvalMode: "auto" });
 	await conv.open();
 	const pushOne = async (frame) => {
 		stream.push(frame);
@@ -218,28 +221,72 @@ test("approval/requested：默认拒绝并 respond，resolved 后清空", async 
 	await tick();
 
 	assert.equal(conv.snapshot().pendingApprovals.length, 0, "resolved 后清空");
-	// FakeStream yield 的信封 rpcId 是固定 "rpc-test"，所以 respond 应针对该 rpcId
 });
 
-test("question/requested：自动应答并记录 pending，resolved 清空", async () => {
+test("approval/requested（默认 interactive）：挂起不等 UI，不自动应答；answerApproval 后 respond", async () => {
 	const { conv, stream } = setup();
 	await conv.open();
-	const pushOne = async (frame) => {
-		stream.push(frame);
-		await tick();
-	};
-	await pushOne({
-		type: "question/requested",
-		sessionId: "s1",
-		questions: [{ id: "q1", question: "继续？", options: [{ label: "是" }, { label: "否" }] }]
-	});
+	stream.push({ type: "approval/requested", sessionId: "s1", approvalId: "ap-1", toolName: "write", rpcId: "rpc-approval" });
 	await tick();
-	assert.equal(conv.snapshot().pendingQuestions.length, 1);
-	// respond 已被 FakeClient 记录（信封 rpcId 固定 rpc-test）
-	assert.equal(conv.client.responds.length, 1, "应自动应答一次");
-	await pushOne({ type: "question/resolved", sessionId: "s1", questionRpcId: "rpc-test" });
+
+	// 挂起：pendingApprovals 有项，但未响应（FakeClient.responds 空）
+	assert.equal(conv.snapshot().pendingApprovals.length, 1, "应挂起进入 pending");
+	assert.equal(conv.client.responds.length, 0, "未自动应答");
+
+	// 用户选择「本会话允许」→ respond + 记入 sessionAllowedTools
+	const pending = conv.snapshot().pendingApprovals[0];
+	await conv.answerApproval(pending, "allowed-session");
+	assert.equal(conv.client.responds.length, 1, "应 respond 一次");
+	assert.ok(conv.sessionAllowedTools.has("write"), "本会话允许应被记住");
+
+	// 再次同一工具→自动放行
+	stream.push({ type: "approval/requested", sessionId: "s1", approvalId: "ap-2", toolName: "write", rpcId: "rpc-approval2" });
 	await tick();
-	assert.equal(conv.snapshot().pendingQuestions.length, 0, "resolved 后清空");
+	assert.equal(conv.snapshot().pendingApprovals.length, 0, "本会话允许的工具自动放行不挂起");
+	assert.equal(conv.client.responds.length, 2, "自动放行也 respond");
+
+	// 拒绝 → respond outcome=rejected
+	stream.push({ type: "approval/requested", sessionId: "s1", approvalId: "ap-3", toolName: "bash", rpcId: "rpc-approval3" });
+	await tick();
+	const bashPending = conv.snapshot().pendingApprovals[0];
+	await conv.answerApproval(bashPending, "rejected");
+	assert.equal(conv.client.responds[2].result.value.outcome, "rejected");
+});
+
+test("approval/requested：acceptEdits 档自动放行编辑工具不挂起", async () => {
+	const { conv, stream } = setup();
+	await conv.open();
+	conv.permissionOptions.editableTools = ["write", "edit"];
+	conv.setPermissionMode("acceptEdits");
+	stream.push({ type: "approval/requested", sessionId: "s1", approvalId: "ap-e", toolName: "write", rpcId: "rpc-ap-e" });
+	await tick();
+	assert.equal(conv.snapshot().pendingApprovals.length, 0, "编辑工具在 acceptEdits 档自动放行");
+	assert.equal(conv.client.responds.length, 1, "自动 respond");
+	// 非编辑工具仍挂起
+	stream.push({ type: "approval/requested", sessionId: "s1", approvalId: "ap-b", toolName: "bash", rpcId: "rpc-ap-b" });
+	await tick();
+	assert.equal(conv.snapshot().pendingApprovals.length, 1, "非编辑工具在 acceptEdits 档挂起待交互");
+});
+
+test("question/requested（auto 模式）：自动答应；interactive 挂起待 answerQuestion", async () => {
+	// auto 模式
+	const { conv, stream } = setup([], { approvalMode: "auto" });
+	await conv.open();
+	stream.push({ type: "question/requested", sessionId: "s1", questions: [{ id: "q1", question: "继续？", options: [{ label: "是" }, { label: "否" }] }] });
+	await tick();
+	assert.equal(conv.client.responds.length, 1, "auto 模式应自动应答一次");
+
+	// interactive 挂起
+	const { conv: conv2, stream: stream2 } = setup();
+	await conv2.open();
+	stream2.push({ type: "question/requested", sessionId: "s1", questions: [{ id: "q2", question: "方案？", options: [{ label: "A" }, { label: "B" }] }] });
+	await tick();
+	assert.equal(conv2.snapshot().pendingQuestions.length, 1, "interactive 挂起");
+	assert.equal(conv2.client.responds.length, 0, "未自动应答");
+	const pendingQ = conv2.snapshot().pendingQuestions[0];
+	await conv2.answerQuestion(pendingQ, [{ id: "q2", selected: ["A"] }]);
+	assert.equal(conv2.client.responds.length, 1, "answerQuestion 后应 respond");
+	assert.deepEqual(conv2.client.responds[0].result.value.answer.answers, [{ id: "q2", selected: ["A"] }]);
 });
 
 test("cancelTurn：调用 session.cancel", async () => {

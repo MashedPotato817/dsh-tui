@@ -117,7 +117,13 @@ export function CommandInput({ vim }) {
 export function PendingApprovals({ approvals }) {
 	if (!approvals || approvals.length === 0) return null;
 	const rows = approvals.map((a) =>
-		h(Box, { key: a.approvalId, paddingX: 1 }, h(Text, { dim: true }, `⏳ 工具 ${a.toolName}`))
+		h(
+			Box,
+			{ key: a.approvalId, paddingX: 1 },
+			h(Text, { bold: true, color: "yellow" }, `⏳ 工具 `),
+			h(Text, { bold: true }, `${a.toolName}`),
+			h(Text, { dim: true }, `   [y]允许一次  [Y]本会话允许  [n]拒绝`)
+		)
 	);
 	return h(
 		Box,
@@ -173,6 +179,22 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 	const hud = hudState({ view: snapshot, session: liveSession });
 
 	useInput((input, key) => {
+		// 审批交互：有挂起批准时，y/Y/n 处理第一个（Claude Code/Codex 式审批卡片）。
+		if (snapshot.pendingApprovals && snapshot.pendingApprovals.length > 0 && !key.ctrl) {
+			const pending = snapshot.pendingApprovals[0];
+			if (input === "y") {
+				conv.answerApproval(pending, "allowed-once");
+				return;
+			}
+			if (input === "Y") {
+				conv.answerApproval(pending, "allowed-session");
+				return;
+			}
+			if (input === "n") {
+				conv.answerApproval(pending, "rejected");
+				return;
+			}
+		}
 		// Claude Code 式 Ctrl+C：运行中 → 中断当前回合；空闲 → 800ms 内双按退出。
 		if (key.ctrl && (input === "c" || input === "C")) {
 			if (snapshot.running) {
