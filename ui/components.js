@@ -136,11 +136,12 @@ export function PendingApprovals({ approvals }) {
 	);
 }
 
-/** 工具卡片：把最近的工具调用渲染成折叠卡片（名称 + 状态 + 参数摘要）。 */
+/** 工具卡片：把最近的工具调用渲染成折叠卡片（名称 + 状态 + 参数摘要 + diff 摘要）。 */
 export function ToolCards({ tools, limit = 5 }) {
 	if (!tools || tools.length === 0) return null;
 	const recent = tools.slice(-limit);
-	const rows = recent.map((t) => {
+	const rows = [];
+	recent.forEach((t) => {
 		let badge, color;
 		if (t.status === "running") {
 			badge = "◐"; color = "cyan";
@@ -149,19 +150,47 @@ export function ToolCards({ tools, limit = 5 }) {
 		} else {
 			badge = "✓"; color = "green";
 		}
-		return h(
-			Box,
-			{ key: t.callId, paddingX: 1 },
-			h(Text, { color, bold: true }, `${badge} `),
-			h(Text, { bold: true }, `${t.name}`),
-			t.args ? h(Text, { dim: true }, `  ${t.args}`) : null
+		rows.push(
+			h(
+				Box,
+				{ key: t.callId, paddingX: 1 },
+				h(Text, { color, bold: true }, `${badge} `),
+				h(Text, { bold: true }, `${t.name}`),
+				t.args ? h(Text, { dim: true }, `  ${t.args}`) : null
+			)
 		);
+		// diff 预览：若工具结果带了 diff meta，展示 +/一行 统计。
+		if (t.diffMeta) {
+			const stats = diffStats(diffLinesFrom(t.diffMeta));
+			if (stats.add || stats.del) {
+				rows.push(
+					h(Box, { key: `${t.callId}-diff`, paddingX: 3 },
+						h(Text, { color: stats.add ? "green" : "dim" }, `  ${diffSummary(stats)}`),
+						diffPreviewLines(t.diffMeta).map((l, i) =>
+							h(Box, { key: `${t.callId}-d${i}`, paddingX: 3 },
+								h(Text, { color: l.startsWith("+") ? "green" : l.startsWith("-") ? "red" : "dim" }, l)
+							)
+						)
+					)
+				);
+			}
+		}
 	});
 	return h(
 		Box,
 		{ flexDirection: "column" },
 		...rows
 	);
+}
+
+/** 取 diff 的前几行（add/del 优先，最多 6 行）用于卡片内预览。 */
+function diffPreviewLines(meta) {
+	const lines = diffLinesFrom(meta);
+	const classified = classifyDiffLines(lines);
+	const interesting = classified
+		.filter((c) => c.tag === "add" || c.tag === "del")
+		.map((c) => c.text);
+	return interesting.slice(0, 6);
 }
 
 /** 快捷键帮助面板（`?` 触发，Claude Code 心智模型）。 */
@@ -410,3 +439,4 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 import { allCommands as allCommandsFn } from "../lib/commands.js";
 import { loadCustomCommands } from "../lib/command-loader.js";
 import { createHistory, pushHistory, navigateHistory } from "../lib/history.js";
+import { diffLinesFrom, classifyDiffLines, diffStats, diffSummary } from "../lib/diff.js";

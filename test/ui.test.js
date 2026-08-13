@@ -61,11 +61,11 @@ test("App 渲染：流式草稿 + 等待批准面板都显示", () => {
 	assert.ok(output.includes("run_code"), "批准面板应含工具名");
 });
 
-test("App 渲染：工具卡片显示名称 + 状态徽标", () => {
+test("App 渲染：工具卡片显示名称 + 状态徽标 + diff 摘要", () => {
 	const conv = fakeConv();
 	conv.state.tools = [
 		{ seq: 5, callId: "c1", name: "run_code", args: '{"code":"1+1"}', status: "running" },
-		{ seq: 6, callId: "c2", name: "read", args: '{"path":"a.txt"}', status: "done" }
+		{ seq: 6, callId: "c2", name: "write", args: '{"path":"a.ts"}', status: "done", diffMeta: "--- a.ts\n+++ a.ts\n@@ -1,2 +1,2 @@\n-old();\n+new();\n" }
 	];
 	const output = renderToString(
 		React.createElement(App, {
@@ -76,7 +76,8 @@ test("App 渲染：工具卡片显示名称 + 状态徽标", () => {
 		})
 	);
 	assert.ok(output.includes("run_code"), "工具卡片应显示工具名");
-	assert.ok(output.includes("read"), "工具卡片应显示工具名");
+	assert.ok(output.includes("read") || output.includes("write"), "工具卡片应显示工具名");
+	assert.ok(output.includes("+1/-1"), "应渲染 diff 摘要 +1/-1");
 });
 
 test("App 渲染：队列 Dock 显示待处理消息", () => {
