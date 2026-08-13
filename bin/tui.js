@@ -1,9 +1,8 @@
 #!/usr/bin/env node
 // dsh-tui — 命令行入口
-//   dsh-tui                          # TTY: 交互 TUI（Ink + Vim）
-//                                     # 非 TTY / 管道: 列出会话
-//   dsh-tui run <prompt>             # 一次性调用（PTC 会话 → 打印回复）
-//     --session <id> --preset <id> --cwd <dir>
+//   dsh-tui [--new|--resume|--session <id>]   # TTY: 交互 TUI；否则列出会话
+//   dsh-tui run <prompt> [--session <id>|--resume] [--preset <id>] [--cwd <dir>]
+//     # 一次性调用（默认新建 PTC 会话 → 打印回复）
 import { DshClient } from "../lib/client.js";
 import { Session, PTC_PRESET } from "../lib/session.js";
 import { lastAssistantText } from "../lib/fold.js";
@@ -13,7 +12,9 @@ const baseUrl = process.env.DSH_URL ?? "http://127.0.0.1:3080";
 const client = new DshClient(baseUrl);
 
 function usage() {
-	console.error("usage: dsh-tui [run <prompt> [--session <id>] [--preset <id>] [--cwd <dir>]]|[--version]");
+	console.error(
+		"usage: dsh-tui [--new|--resume|--session <id>] | dsh-tui run <prompt> [--session <id>] | dsh-tui --version"
+	);
 }
 
 async function listSessions() {
@@ -28,18 +29,20 @@ async function listSessions() {
 }
 
 function parseRunArgs(args) {
-	const promptText = args[1];
+	const promptText = args.find((a, i) => i === 0);
 	if (!promptText) {
 		usage();
 		process.exit(2);
 	}
-	const opts = { sessionId: null, preset: PTC_PRESET, cwd: null };
-	for (let i = 2; i < args.length; i++) {
+	const opts = { sessionId: null, resume: false, preset: PTC_PRESET, cwd: null };
+	for (let i = 1; i < args.length; i++) {
 		const flag = args[i];
 		const value = args[i + 1];
 		if (flag === "--session" && value) {
 			opts.sessionId = value;
 			i++;
+		} else if (flag === "--resume") {
+			opts.resume = true;
 		} else if (flag === "--preset" && value) {
 			opts.preset = value;
 			i++;
@@ -62,11 +65,47 @@ async function main() {
 		return;
 	}
 
+	if (args[0] !== "run" && args[0] && args[0].startsWith("--")) {
+		// 交互入口的初始化选项：--new / --resume / --session <id>
+		let mode = "new";
+		let sessionId = null;
+		let preset = PTC_PRESET;
+		let cwd = null;
+		for (let i = 0; i < args.length; i++) {
+			const flag = args[i];
+			const value = args[i + 1];
+			if (flag === "--new") mode = "new";
+			else if (flag === "--resume") mode = "resume";
+			else if (flag === "--session" && value) {
+				sessionId = value;
+				mode = "session";
+				i++;
+			} else if (flag === "--preset" && value) {
+				preset = value;
+				i++;
+			} else if (flag === "--cwd" && value) {
+				cwd = value;
+				i++;
+			} else {
+				usage();
+				process.exit(2);
+			}
+		}
+		if (process.stdout.isTTY && process.stdin.isTTY) {
+			await startInteractive({ baseUrl, sessionId, mode, preset, cwd });
+		} else {
+			await listSessions();
+		}
+		return;
+	}
+
 	if (args[0] === "run") {
-		const { promptText, opts } = parseRunArgs(args);
-		const session = opts.sessionId
-			? await Session.open(client, opts.sessionId)
-			: await Session.create(client, { cwd: opts.cwd, agentPreset: opts.preset });
+		const { promptText, opts } = parseRunArgs(args.slice(1));
+		const session = opts.resume
+			? ((await Session.openRecent(client)) ?? (await Session.create(client, { cwd: opts.cwd, agentPreset: opts.preset })))
+			: opts.sessionId
+				? await Session.open(client, opts.sessionId)
+				: await Session.create(client, { cwd: opts.cwd, agentPreset: opts.preset });
 		const view = await session.converse(promptText);
 		if (view.tools.length > 0) {
 			console.error(`[${session.sessionId}] ${view.tools.length} 次工具调用`);
@@ -77,7 +116,7 @@ async function main() {
 
 	// 无子命令：TTY → 交互 TUI；否则列出会话。
 	if (process.stdout.isTTY && process.stdin.isTTY) {
-		await startInteractive({ baseUrl, sessionId: null, preset: PTC_PRESET, cwd: null });
+		await startInteractive({ baseUrl, sessionId: null, mode: "new", preset: PTC_PRESET, cwd: null });
 	} else {
 		await listSessions();
 	}

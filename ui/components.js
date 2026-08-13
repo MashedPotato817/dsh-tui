@@ -6,10 +6,10 @@
  * 接到 LiveConversation。
  */
 import { createElement as h } from "react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Box, Text, useInput } from "ink";
 import { hudState, formatCost } from "../lib/hud.js";
-import { buildSlashPanel, BUILTIN_COMMANDS } from "../lib/slash.js";
+import { buildSlashPanel } from "../lib/slash.js";
 import { createVim, submitText } from "../lib/vim.js";
 import { processInput } from "../lib/bridge.js";
 
@@ -105,11 +105,12 @@ export function CommandInput({ vim }) {
  * @param {import("../lib/live.js").LiveConversation} props.conv
  * @param {{ session: object, onCommand: (cmd: string) => void, onExit: () => void }} props
  */
-export default function App({ conv, session, onCommand, onExit }) {
+export default function App({ conv, session, onCommand, onExit, getSession }) {
 	const [snapshot, setSnapshot] = useState(() => conv.snapshot());
 	const [vim, setVim] = useState(() => createVim());
 	const [slashActive, setSlashActive] = useState(0);
-	const [overlay, setOverlay] = useState(null); // 'slash' | null
+	// 让 HUD 跟随会话切换
+	const [liveSession, setLiveSession] = useState(() => (getSession ? getSession() : session));
 
 	useEffect(() => {
 		conv.onState = (state) => setSnapshot({ ...state });
@@ -119,7 +120,16 @@ export default function App({ conv, session, onCommand, onExit }) {
 		return () => conv.close();
 	}, [conv]);
 
-	const hud = hudState({ view: snapshot, session });
+	useEffect(() => {
+		if (!getSession) return;
+		const t = setInterval(() => {
+			const cur = getSession();
+			setLiveSession((prev) => (prev && prev.sessionId === cur.sessionId ? prev : cur));
+		}, 300);
+		return () => clearInterval(t);
+	}, [getSession]);
+
+	const hud = hudState({ view: snapshot, session: liveSession });
 
 	useInput((input, key) => {
 		const result = processInput(vim, input, key);
@@ -132,11 +142,8 @@ export default function App({ conv, session, onCommand, onExit }) {
 			}
 		} else if (result.action === "run-command") {
 			const command = result.command ?? "";
-			if (command === "q" || command === "quit") onExit();
-			else if (command === "w") {
-				// 命令行编辑模式的提交（与 insert Enter 相同语义）
-				const text = submitText(result.state);
-				if (text.trim()) conv.send(text).catch(() => {});
+			if (command === "q" || command === "quit") {
+				onExit();
 			} else {
 				onCommand(command);
 			}
@@ -144,9 +151,7 @@ export default function App({ conv, session, onCommand, onExit }) {
 	});
 
 	const text = submitText(vim);
-	const slashPanel = !snapshot.notice
-		? buildSlashPanel(text, BUILTIN_COMMANDS, { active: slashActive })
-		: null;
+	const slashPanel = buildSlashPanel(text, allCmds(), { active: slashActive });
 
 	return h(
 		Box,
@@ -158,3 +163,6 @@ export default function App({ conv, session, onCommand, onExit }) {
 		h(CommandInput, { vim })
 	);
 }
+
+// 合并 builtin + local 命令供 slash 面板展示
+import { allCommands as allCmds } from "../lib/commands.js";

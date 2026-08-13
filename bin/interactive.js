@@ -1,43 +1,117 @@
 #!/usr/bin/env node
 // 交互模式：Ink 渲染 + Vim 模态输入。TTY 且非 `run` 一次性调用时自动进入。
+// 支持 --session <id> / --resume / --new 决定初始会话；TUI 内 /new /resume 切换。
 import { render } from "ink";
 import React from "react";
 import { DshClient } from "../lib/client.js";
 import { Session } from "../lib/session.js";
 import { LiveConversation } from "../lib/live.js";
 import App from "../ui/components.js";
-import { createVim, submitText } from "../lib/vim.js";
+import { routeSlash } from "../lib/commands.js";
+import { writeRecent } from "../lib/registry.js";
 
-export async function startInteractive({ baseUrl, sessionId, preset, cwd }) {
+/**
+ * 决定初始会话：最终都会把用到的最新会话写进最近记忆。
+ */
+async function initialSession(client, { sessionId, mode, preset, cwd }) {
+	if (sessionId) {
+		return Session.open(client, sessionId);
+	}
+	if (mode === "resume") {
+		const resumed = await Session.openRecent(client);
+		if (resumed) return resumed;
+		// 没有可恢复的 → 新建
+	}
+	return Session.create(client, { cwd, agentPreset: preset });
+}
+
+export async function startInteractive({ baseUrl, sessionId, preset, cwd, mode = "new" }) {
 	const client = new DshClient(baseUrl);
-
-	// 建立会话：显式 sessionId 复用，否则新建（默认 PTC 模式）。
-	const session = sessionId
-		? await Session.open(client, sessionId)
-		: await Session.create(client, { cwd, agentPreset: preset });
+	let session = await initialSession(client, { sessionId, mode, preset, cwd });
+	writeRecent(session.sessionId, { cwd: session.cwd, agentPreset: session.agentPreset });
 
 	const conv = new LiveConversation({ client, session });
 
-	const onCommand = async (cmd) => {
-		// slash 命令：以 / 开头发给 session.prompt，由 host 命令注册表执行
-		//（status/new/exit 等进模型？不 —— / 开头 host 直接走命令注册表，不进模型）。
-		// exit / quit 由 UI 层拦截了；这里剩下的都作为 host 命令转发。
+	const onCommand = async (cmdText) => {
+		// cmdText 已是去掉 / 的剩余（或要带 /？）—— UI 传完整输入更好，这里直接收 name
+		const routed = routeSlash(cmdText.startsWith("/") ? cmdText : `/${cmdText}`);
+		if (!routed) return;
+		if (routed.local) {
+			await handleLocalAction(routed.action, { conv, client, onRestart });
+			return;
+		}
+		// host 命令：以 /name args 发给 session.prompt
 		try {
-			await conv.send(`/${cmd}`);
+			await conv.send(`/${routed.name}${routed.args ? ` ${routed.args}` : ""}`);
 		} catch (error) {
 			conv.state.notice = `命令出错：${error.message}`;
 			conv.emit();
 		}
 	};
 
+	const handleLocalAction = async (action, { conv, client }) => {
+		switch (action) {
+			case "exit":
+				process.exit(0);
+				break;
+			case "new": {
+				const next = await Session.create(client, { cwd: session.cwd, agentPreset: session.agentPreset ?? "code" });
+				session = next;
+				writeRecent(session.sessionId, { cwd: session.cwd, agentPreset: session.agentPreset });
+				await conv.switchSession(next);
+				conv.state.notice = `已新建会话：${session.sessionId}`;
+				conv.emit();
+				break;
+			}
+			case "resume": {
+				const next = await Session.openRecent(client);
+				if (!next) {
+					conv.state.notice = "没有可恢复的会话";
+					conv.emit();
+					break;
+				}
+				if (next.sessionId === session.sessionId) {
+					conv.state.notice = "已在最近会话上";
+					conv.emit();
+					break;
+				}
+				session = next;
+				writeRecent(session.sessionId, { cwd: session.cwd, agentPreset: session.agentPreset });
+				await conv.switchSession(next);
+				conv.state.notice = `已恢复会话：${session.sessionId}`;
+				conv.emit();
+				break;
+			}
+			case "list": {
+				const items = await Session.list(client);
+				conv.state.notice = items
+					.filter((i) => !i.blank)
+					.slice(0, 5)
+					.map((i) => `${i.sessionId.slice(0, 8)}${i.running ? "▶" : ""}${i.agentPreset ? `[${i.agentPreset}]` : ""}`)
+					.join("  ");
+				conv.emit();
+				break;
+			}
+			case "clear":
+				conv.state.notice = "已清空客户端会话记忆（不影响 host 上的会话）";
+				conv.emit();
+				break;
+			default:
+				break;
+		}
+	};
+
+	// onRestart 占位（switchSession 已覆盖切换，process 内部不需要重启）
+	const onRestart = async () => {};
+
 	render(
 		React.createElement(App, {
 			conv,
 			session: { sessionId: session.sessionId, agentPreset: session.agentPreset, cwd: session.cwd },
 			onCommand,
-			onExit: () => {
-				process.exit(0);
-			}
+			onExit: () => process.exit(0),
+			// App 内部可感知当前 sessionId（切换后更新 UI 绑定）
+			getSession: () => session
 		})
 	);
 }

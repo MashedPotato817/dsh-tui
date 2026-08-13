@@ -110,6 +110,35 @@ test("Session.open 复用已存在会话；找不到抛 session-not-found", asyn
 	});
 });
 
+test("Session.openRecent：优先客户端记忆，其次最近非 blank 会话", async () => {
+	// mock registry：记忆指向 session-c（但已被归档/blank）
+	const mem = { sessionId: "session-old", cwd: "", agentPreset: "code" };
+	const items = [
+		{ sessionId: "session-old", blank: true, running: false, updatedAt: 1, agentPreset: "code" },
+		{ sessionId: "session-new", blank: false, running: false, updatedAt: 100, agentPreset: "code", cwd: "C:\\w" }
+	];
+	// 用 FakeHost 但覆盖 list
+	const host = new FakeHost();
+	host.request = async (method, payload) => {
+		if (method === "session.list") return { items };
+		if (method === "session.create") return { sessionId: "session-x", agentPreset: "code" };
+		throw new Error(`unexpected ${method}`);
+	};
+	// openRecent 会先读真正的 registry（无 → null），再回退 list 里最近非 blank
+	const sess = await Session.openRecent(host, { remembered: mem, items });
+	assert.equal(sess.sessionId, "session-new");
+});
+
+test("openRecent:list 全是 blank 且无记忆 → null", async () => {
+	const host = new FakeHost();
+	host.request = async (method) => {
+		if (method === "session.list") return { items: [{ sessionId: "s-blank", blank: true, running: false, updatedAt: 1 }] };
+		throw new Error(`unexpected ${method}`);
+	};
+	const sess = await Session.openRecent(host, { remembered: null, items: [{ sessionId: "s-blank", blank: true }] });
+	assert.equal(sess, null);
+});
+
 test("converse：prompt → 轮询 → 折叠出 user + assistant 回复，turn completed", async () => {
 	const host = new FakeHost({ turnDelayMs: 10 });
 	const session = await Session.create(host);

@@ -17,9 +17,12 @@ const SETS = {
 		"test/stream.test.js",
 		"test/live.test.js",
 		"test/vim.test.js",
-		"test/hud.test.js"
+		"test/hud.test.js",
+		"test/bridge.test.js",
+		"test/ui.test.js",
+		"test/registry.test.js"
 	],
-	"test-live": ["test-live/ptc.smoke.test.js", "test-live/stream.smoke.test.js"]
+	"test-live": ["test-live/ptc.smoke.test.js", "test-live/stream.smoke.test.js", "test-live/resume.smoke.test.js"]
 };
 
 const name = process.argv[2] ?? "test";
