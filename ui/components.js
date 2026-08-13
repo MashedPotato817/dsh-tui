@@ -20,12 +20,15 @@ export function HUD({ hud }) {
 	const running = hud.running ? "●" : "○";
 	const tok =
 		`${(hud.usage.input || 0).toLocaleString()}i/${(hud.usage.output || 0).toLocaleString()}o`;
+	const ctx = hud.contextPct !== null && hud.contextPct !== undefined
+		? ` | ctx ${hud.contextPct}%`
+		: "";
 	return h(
 		Box,
 		{ borderStyle: "single", borderColor: "gray", paddingX: 1 },
 		h(Text, { color: "cyan", bold: true }, ` ${running} ${hud.model} | ${hud.mode}`),
 		h(Text, { color: hud.permColor || "gray", bold: true }, ` ${hud.permBadge || "⏸ manual"} `),
-		h(Text, { color: "dim" }, `${cost ? ` | ${cost}` : ""} | ${tok}t`),
+		h(Text, { color: "dim" }, `${cost ? ` | ${cost}` : ""} | ${tok}t${ctx}`),
 		h(Box, { marginLeft: 1 }, h(Text, { color: "dim" }, ` ${hud.sessionId} ${hud.cwd || ""}`))
 	);
 }
