@@ -242,6 +242,25 @@ export function QueueDock({ queue }) {	if (!queue || queue.length === 0) return 
 	);
 }
 
+/** 子代理面板（Codex/Claude Code subagent 可视化）：显示主会话 fork 出的子代理。 */
+export function SubagentDock({ subagents }) {
+	if (!subagents || subagents.length === 0) return null;
+	const rows = subagents.map((s) =>
+		h(
+			Box,
+			{ key: s.sessionId, paddingX: 1 },
+			h(Text, { color: s.running ? "cyan" : "dim" }, s.running ? "◐" : "◼"),
+			h(Text, { dim: true }, `  ${String(s.sessionId).slice(0, 16)}${s.summary ? ` — ${s.summary}` : ""}`)
+		)
+	);
+	return h(
+		Box,
+		{ borderStyle: "round", borderColor: "magenta", flexDirection: "column" },
+		h(Text, { bold: true, color: "magenta" }, " 子代理"),
+		...rows
+	);
+}
+
 /**
  * 主 App 组件。
  * @param {object} props
@@ -288,6 +307,14 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		}, 300);
 		return () => clearInterval(t);
 	}, [getSession]);
+
+	// 周期刷新子代理面板（只读状态板；无该方法（如测试/嵌入）则跳过）。
+	useEffect(() => {
+		if (typeof conv.refreshSubagents !== "function") return;
+		conv.refreshSubagents().catch(() => {});
+		const t = setInterval(() => conv.refreshSubagents().catch(() => {}), 5000);
+		return () => clearInterval(t);
+	}, [conv]);
 
 	const hud = hudState({ view: snapshot, session: liveSession });
 
@@ -432,6 +459,7 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		h(PendingApprovals, { approvals: snapshot.pendingApprovals }),
 		h(ToolCards, { tools: snapshot.tools }),
 		h(QueueDock, { queue: snapshot.queue }),
+		h(SubagentDock, { subagents: snapshot.subagents }),
 		h(SlashPanel, { panel: slashPanel }),
 		h(Notice, { notice: snapshot.notice }),
 		h(CommandInput, { vim })

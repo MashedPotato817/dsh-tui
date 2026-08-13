@@ -54,6 +54,10 @@ class FakeClient {
 			this.cancelled = true;
 			return { accepted: true };
 		}
+		if (method === "subagent.list") {
+			this.subagentListCalls = (this.subagentListCalls ?? 0) + 1;
+			return { items: [{ sessionId: "session-child", running: true }] };
+		}
 		throw new Error(`unexpected ${method}`);
 	}
 
@@ -295,4 +299,13 @@ test("cancelTurn：调用 session.cancel", async () => {
 	await conv.cancelTurn();
 	assert.equal(conv.client.cancelled, true);
 	assert.match(conv.snapshot().notice, /停止/);
+});
+
+test("refreshSubagents：调 subagent.list，填充子代理列表", async () => {
+	const { conv } = setup();
+	await conv.open();
+	await conv.refreshSubagents();
+	assert.equal(conv.client.subagentListCalls, 1);
+	assert.equal(conv.snapshot().subagents.length, 1);
+	assert.equal(conv.snapshot().subagents[0].sessionId, "session-child");
 });

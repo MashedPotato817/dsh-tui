@@ -120,3 +120,18 @@ test("App 渲染：UI Mode 标签显示在 HUD（审批时 APPROVE）", () => {
 	);
 	assert.ok(output.includes("APPROVE"), "有挂起审批时 HUD 应显示 APPROVE mode");
 });
+
+test("App 渲染：子代理 Dock 显示 fork 出的子代理", () => {
+	const conv = fakeConv();
+	conv.state.subagents = [{ sessionId: "session-child-1", running: true }, { sessionId: "session-child-2", running: false }];
+	const output = renderToString(
+		React.createElement(App, {
+			conv,
+			session: { sessionId: "session-abcdef123456", agentPreset: "code", cwd: "C:\\work" },
+			onCommand: () => {},
+			onExit: () => {}
+		})
+	);
+	assert.ok(output.includes("子代理"), "应渲染子代理面板标题");
+	assert.ok(output.includes("session-child-1"), "应显示子代理 sessionId");
+});
