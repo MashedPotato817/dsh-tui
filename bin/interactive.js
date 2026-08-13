@@ -128,7 +128,8 @@ export async function startInteractive({ baseUrl, sessionId, preset, cwd, mode =
 				process.exit(0);
 			},
 			getSession: () => session
-		})
+		}),
+		{ exitOnCtrlC: false } // 自管 Ctrl+C：运行中中断、空闲双按退出
 	);
 
 	// Ctrl+C / SIGINT：优雅关闭当前会话流

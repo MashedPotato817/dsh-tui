@@ -6,7 +6,7 @@
  * 接到 LiveConversation。
  */
 import { createElement as h } from "react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Box, Text, useInput, Static } from "ink";
 import { hudState, formatCost } from "../lib/hud.js";
 import { buildSlashPanel } from "../lib/slash.js";
@@ -139,6 +139,8 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 	const [slashActive, setSlashActive] = useState(0);
 	// 让 HUD 跟随会话切换
 	const [liveSession, setLiveSession] = useState(() => (getSession ? getSession() : session));
+	// Ctrl+C 双按退出计时（Claude Code 安全退出双保险）
+	const lastCtrlC = useRef(0);
 
 	useEffect(() => {
 		conv.onState = (state) => setSnapshot({ ...state });
@@ -160,6 +162,22 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 	const hud = hudState({ view: snapshot, session: liveSession });
 
 	useInput((input, key) => {
+		// Claude Code 式 Ctrl+C：运行中 → 中断当前回合；空闲 → 800ms 内双按退出。
+		if (key.ctrl && (input === "c" || input === "C")) {
+			if (snapshot.running) {
+				conv.cancelTurn();
+				return;
+			}
+			const now = Date.now();
+			if (now - lastCtrlC.current < 800) {
+				onExit();
+				return;
+			}
+			lastCtrlC.current = now;
+			conv.state.notice = "再按 Ctrl+C 退出";
+			conv.emit();
+			return;
+		}
 		// Claude Code 式权限档位循环：Shift+Tab（Windows 终端也可 Alt+M）。
 		if (key.shift && key.tab) {
 			const next = nextMode(conv.permissionMode);
@@ -182,11 +200,37 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 			return;
 		}
 
+		const currentText = submitText(vim);
+		// slash 命令面板导航：输入以 / 开头且命中命令时，Tab/方向键循环选择，
+		// Enter/Tab 选中执行（Claude Code 式可发现性补全）。
+		const activePanel = buildSlashPanel(currentText, allCmds(), { active: slashActive });
+		if (activePanel && activePanel.items.length > 0) {
+			if (key.tab && !key.shift) {
+				setSlashActive((a) => (a + 1) % activePanel.items.length);
+				return;
+			}
+			if (key.downArrow) {
+				setSlashActive((a) => (a + 1) % activePanel.items.length);
+				return;
+			}
+			if (key.upArrow) {
+				setSlashActive((a) => (a - 1 + activePanel.items.length) % activePanel.items.length);
+				return;
+			}
+		}
+
 		const result = processInput(vim, input, key);
 		setVim(result.state);
 
 		if (result.action === "submit") {
 			const text = submitText(result.state);
+			// slash 面板可见时 Enter 选中当前命令执行
+			const panel = buildSlashPanel(text, allCmds(), { active: slashActive });
+			if (panel && panel.items.length > 0 && text.startsWith("/")) {
+				const item = panel.items[slashActive % panel.items.length];
+				if (item.name) onCommand(item.name);
+				return;
+			}
 			if (text.trim()) {
 				conv.send(text).catch(() => {});
 			}
