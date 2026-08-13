@@ -65,6 +65,28 @@ async function main() {
 		return;
 	}
 
+	if (args[0] === "--help" || args[0] === "-h") {
+		console.log(
+			[
+				"dsh-tui — DeepSeek Harness 终端客户端",
+				"",
+				"用法:",
+				"  dsh-tui [--new|--resume|--session <id>]  启动交互 TUI（默认新建 PTC 会话）",
+				"  dsh-tui run <prompt> [--session <id>] [--resume]  一次性调用并打印回复",
+				"  dsh-tui [--new|--resume|--session <id>] — 非 TTY 下列出会话",
+				"  dsh-tui --version / --help",
+				"",
+				"交互 TUI:",
+				"  i/a/A/o  进 insert 输入   ESC 回 normal   : 命令模式",
+				"  :w 提交   :cancel 停止回合   :q 退出",
+				"  /new /resume /help /status 或 host 命令（如 /git status）",
+				"",
+				"环境变量: DSH_URL   host 地址，默认 " + baseUrl
+			].join("\n")
+		);
+		return;
+	}
+
 	if (args[0] !== "run" && args[0] && args[0].startsWith("--")) {
 		// 交互入口的初始化选项：--new / --resume / --session <id>
 		let mode = "new";
