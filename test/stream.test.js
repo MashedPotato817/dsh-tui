@@ -40,16 +40,16 @@ function fakeFetch(chunks, status = 200) {
 	});
 }
 
-const frame = (payload) => JSON.stringify({ type: "server-request", rpcId: "r", method: "events.mux", payload });
+const frameWithRpc = (rpcId, payload) => JSON.stringify({ type: "server-request", rpcId, method: "events.mux", payload });
 
-test("MuxStream.frames：跳过注释行，逐帧 yield payload，跨 chunk 边界分帧", async () => {
+test("MuxStream.frames：跳过注释行，逐帧 yield 信封（含 rpcId），跨 chunk 边界分帧", async () => {
 	const payload1 = { type: "session/subscribed", sessionId: "s1", lastSeq: 3 };
 	const payload2 = { type: "stream/error", error: { code: "internal", message: "boom" } };
-	const f1 = frame(payload1);
+	const f1 = frameWithRpc("r1", payload1);
 	// 第一帧拆成两段到达（在帧中间断开），第二帧紧跟其后
 	const chunks = [
 		`: connected\n\ndata: ${f1.slice(0, 30)}`,
-		`${f1.slice(30)}\n\ndata: ${frame(payload2)}\n\n`
+		`${f1.slice(30)}\n\ndata: ${frameWithRpc("r2", payload2)}\n\n`
 	];
 	const stream = new MuxStream("http://127.0.0.1:3080", { fetchImpl: fakeFetch(chunks) });
 	const frames = [];
@@ -58,7 +58,11 @@ test("MuxStream.frames：跳过注释行，逐帧 yield payload，跨 chunk 边�
 		frames.push(f);
 	}
 	assert.equal(opened, true);
-	assert.deepEqual(frames, [payload1, payload2]);
+	assert.equal(frames.length, 2);
+	assert.equal(frames[0].rpcId, "r1");
+	assert.equal(frames[0].payload.type, "session/subscribed");
+	assert.deepEqual(frames[0].payload, payload1);
+	assert.equal(frames[1].payload.type, "stream/error");
 });
 
 test("MuxStream.frames：HTTP 错误 → transport failure", async () => {
@@ -70,9 +74,9 @@ test("MuxStream.frames：HTTP 错误 → transport failure", async () => {
 
 test("MuxStream.frames：坏帧跳过，后续帧照常", async () => {
 	const good = { type: "session/subscribed", sessionId: "s1", lastSeq: 1 };
-	const chunks = [`data: garbage\n\ndata: ${frame(good)}\n\n`];
+	const chunks = [`data: garbage\n\ndata: ${frameWithRpc("r", good)}\n\n`];
 	const stream = new MuxStream("http://127.0.0.1:3080", { fetchImpl: fakeFetch(chunks) });
 	const frames = [];
 	for await (const f of stream.frames()) frames.push(f);
-	assert.deepEqual(frames, [good]);
+	assert.deepEqual(frames[0].payload, good);
 });

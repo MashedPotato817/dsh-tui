@@ -99,6 +99,19 @@ export function CommandInput({ vim }) {
 	);
 }
 
+export function PendingApprovals({ approvals }) {
+	if (!approvals || approvals.length === 0) return null;
+	const rows = approvals.map((a) =>
+		h(Box, { key: a.approvalId, paddingX: 1 }, h(Text, { dim: true }, `⏳ 工具 ${a.toolName}`))
+	);
+	return h(
+		Box,
+		{ borderStyle: "round", borderColor: "yellow", flexDirection: "column" },
+		h(Text, { bold: true, color: "yellow" }, " 等待批准"),
+		...rows
+	);
+}
+
 /**
  * 主 App 组件。
  * @param {object} props
@@ -144,6 +157,8 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 			const command = result.command ?? "";
 			if (command === "q" || command === "quit") {
 				onExit();
+			} else if (command === "cancel" || command === "c") {
+				conv.cancelTurn();
 			} else {
 				onCommand(command);
 			}
@@ -158,6 +173,7 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		{ flexDirection: "column", height: "100%" },
 		h(HUD, { hud }),
 		h(Box, { flexDirection: "column", flexGrow: 1, minHeight: 4 }, ConversationList({ messages: snapshot.messages, streaming: snapshot.streaming })),
+		h(PendingApprovals, { approvals: snapshot.pendingApprovals }),
 		h(SlashPanel, { panel: slashPanel }),
 		h(Notice, { notice: snapshot.notice }),
 		h(CommandInput, { vim })

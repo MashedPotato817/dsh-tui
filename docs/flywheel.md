@@ -16,6 +16,15 @@ live 测试默认跳过（需要 `DSH_TEST_LIVE=1`），由脚本自动注入；
 `DSH_TEST_LIVE=1 node --test test-live/`。host 地址用 `DSH_URL` 覆盖，默认
 `http://127.0.0.1:3080`。
 
+### 当前覆盖（里程碑 3–5）
+
+- `test/` 单元飞轮（73 例）：fold 事件折叠、Session 模型（FakeHost）、mux SSE 传输、
+  LiveConversation（基线/增量/流式草稿/应答/切换）、Vim 模态、HUD、输入桥、slash 面板、
+  会话记忆、应答策略、UI renderToString 冒烟。
+- `test-live/` live 飞轮（3 例）：PTC 全链路、真实 mux 流式、会话恢复历史。
+- 里程碑 5 新增：question/approval 自动应答（安全默认：拒绝工具、decline 计划）、
+  `:cancel` 停回合、`switchSession` 切换会话、SIGINT 优雅关闭。
+
 ## PTC 模式是什么
 
 PTC 模式 = DSH 的 `code` agent preset：具备标准模式全部能力，并通过

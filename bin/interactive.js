@@ -109,9 +109,26 @@ export async function startInteractive({ baseUrl, sessionId, preset, cwd, mode =
 			conv,
 			session: { sessionId: session.sessionId, agentPreset: session.agentPreset, cwd: session.cwd },
 			onCommand,
-			onExit: () => process.exit(0),
-			// App 内部可感知当前 sessionId（切换后更新 UI 绑定）
+			onExit: () => {
+				// 优雅退出：关流再退出
+				try {
+					conv.close();
+				} catch {
+					/* ignore */
+				}
+				process.exit(0);
+			},
 			getSession: () => session
 		})
 	);
+
+	// Ctrl+C / SIGINT：优雅关闭当前会话流
+	process.on("SIGINT", () => {
+		try {
+			conv.close();
+		} catch {
+			/* ignore */
+		}
+		process.exit(0);
+	});
 }

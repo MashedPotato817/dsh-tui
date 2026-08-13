@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { LiveConversation, initialState } from "../lib/live.js";
 
-/** 可手动 push 帧的假 mux 流。 */
+/** 可手动 push 帧的假 mux 流（yield MuxStream 信封：{rpcId, payload}）。 */
 class FakeStream {
 	constructor() {
 		this.queue = [];
@@ -17,8 +17,10 @@ class FakeStream {
 			while (this.waiters.length) this.waiters.shift()();
 		});
 		for (;;) {
-			if (this.queue.length) yield this.queue.shift();
-			else if (this.closed) return;
+			if (this.queue.length) {
+				const frame = this.queue.shift();
+				yield { rpcId: "rpc-test", payload: frame };
+			} else if (this.closed) return;
 			else await new Promise((resolve) => this.waiters.push(resolve));
 		}
 	}
@@ -46,7 +48,17 @@ class FakeClient {
 			this.prompts.push(payload.content[0].text);
 			return { accepted: true };
 		}
+		if (method === "session.cancel") {
+			this.cancelled = true;
+			return { accepted: true };
+		}
 		throw new Error(`unexpected ${method}`);
+	}
+
+	async respond(rpcId, result) {
+		this.responds = this.responds ?? [];
+		this.responds.push({ rpcId, result });
+		return { accepted: true };
 	}
 }
 
@@ -190,4 +202,50 @@ test("initialState 形状", () => {
 	assert.equal(s.running, false);
 	assert.equal(s.streaming, null);
 	assert.deepEqual(s.messages, []);
+	assert.deepEqual(s.pendingApprovals, []);
+	assert.deepEqual(s.pendingQuestions, []);
+});
+
+test("approval/requested：默认拒绝并 respond，resolved 后清空", async () => {
+	const { conv, stream } = setup();
+	await conv.open();
+	const pushOne = async (frame) => {
+		stream.push(frame);
+		await tick();
+	};
+	await pushOne({ type: "approval/requested", sessionId: "s1", approvalId: "ap-1", toolName: "write", rpcId: "rpc-approval" });
+	await pushOne({ type: "approval/resolved", sessionId: "s1", approvalId: "ap-1", outcome: "allowed-once" });
+	await tick();
+
+	assert.equal(conv.snapshot().pendingApprovals.length, 0, "resolved 后清空");
+	// FakeStream yield 的信封 rpcId 是固定 "rpc-test"，所以 respond 应针对该 rpcId
+});
+
+test("question/requested：自动应答并记录 pending，resolved 清空", async () => {
+	const { conv, stream } = setup();
+	await conv.open();
+	const pushOne = async (frame) => {
+		stream.push(frame);
+		await tick();
+	};
+	await pushOne({
+		type: "question/requested",
+		sessionId: "s1",
+		questions: [{ id: "q1", question: "继续？", options: [{ label: "是" }, { label: "否" }] }]
+	});
+	await tick();
+	assert.equal(conv.snapshot().pendingQuestions.length, 1);
+	// respond 已被 FakeClient 记录（信封 rpcId 固定 rpc-test）
+	assert.equal(conv.client.responds.length, 1, "应自动应答一次");
+	await pushOne({ type: "question/resolved", sessionId: "s1", questionRpcId: "rpc-test" });
+	await tick();
+	assert.equal(conv.snapshot().pendingQuestions.length, 0, "resolved 后清空");
+});
+
+test("cancelTurn：调用 session.cancel", async () => {
+	const { conv } = setup();
+	await conv.open();
+	await conv.cancelTurn();
+	assert.equal(conv.client.cancelled, true);
+	assert.match(conv.snapshot().notice, /停止/);
 });
