@@ -29,25 +29,28 @@ async function listSessions() {
 }
 
 function parseRunArgs(args) {
-	const promptText = args.find((a, i) => i === 0);
+	// prompt = 第一个非 -- 开头的参数；flags 可出现在 prompt 前后。
+	const promptText = args.find((a) => !a.startsWith("--"));
 	if (!promptText) {
 		usage();
 		process.exit(2);
 	}
-	const opts = { sessionId: null, resume: false, preset: PTC_PRESET, cwd: null };
-	for (let i = 1; i < args.length; i++) {
+	const opts = { sessionId: null, resume: false, preset: PTC_PRESET, cwd: null, json: false };
+	for (let i = 0; i < args.length; i++) {
 		const flag = args[i];
-		const value = args[i + 1];
-		if (flag === "--session" && value) {
-			opts.sessionId = value;
+		if (flag === promptText) continue; // 跳过 prompt 本身
+		if (flag === "--session" && args[i + 1]) {
+			opts.sessionId = args[i + 1];
 			i++;
 		} else if (flag === "--resume") {
 			opts.resume = true;
-		} else if (flag === "--preset" && value) {
-			opts.preset = value;
+		} else if (flag === "--json") {
+			opts.json = true;
+		} else if (flag === "--preset" && args[i + 1]) {
+			opts.preset = args[i + 1];
 			i++;
-		} else if (flag === "--cwd" && value) {
-			opts.cwd = value;
+		} else if (flag === "--cwd" && args[i + 1]) {
+			opts.cwd = args[i + 1];
 			i++;
 		} else {
 			usage();
@@ -72,7 +75,7 @@ async function main() {
 				"",
 				"用法:",
 				"  dsh-tui [--new|--resume|--session <id>]  启动交互 TUI（默认新建 PTC 会话）",
-				"  dsh-tui run <prompt> [--session <id>] [--resume]  一次性调用并打印回复",
+				"  dsh-tui run <prompt> [--session <id>] [--resume] [--json]  一次性调用并打印回复",
 				"  dsh-tui [--new|--resume|--session <id>] — 非 TTY 下列出会话",
 				"  dsh-tui --version / --help",
 				"",
@@ -129,6 +132,29 @@ async function main() {
 				? await Session.open(client, opts.sessionId)
 				: await Session.create(client, { cwd: opts.cwd, agentPreset: opts.preset });
 		const view = await session.converse(promptText);
+		if (opts.json) {
+			// 结构化 JSON 输出（供脚本/CI 消费，等价 Codex exec --json / OpenCode headless）。
+			const usage = view.messages.reduce(
+				(acc, m) => {
+					if (m.usage) {
+						acc.input += m.usage.inputTokens ?? 0;
+						acc.output += m.usage.outputTokens ?? 0;
+					}
+					return acc;
+				},
+				{ input: 0, output: 0 }
+			);
+			process.stdout.write(JSON.stringify({
+				sessionId: session.sessionId,
+				agentPreset: session.agentPreset,
+				reply: lastAssistantText(view) ?? "",
+				turn: view.turn,
+				toolCalls: view.tools.length,
+				usage,
+				turnEnd: view.turnEnd ? view.turnEnd.reason.kind : null
+			}, null, 2) + "\n");
+			return;
+		}
 		if (view.tools.length > 0) {
 			console.error(`[${session.sessionId}] ${view.tools.length} 次工具调用`);
 		}
