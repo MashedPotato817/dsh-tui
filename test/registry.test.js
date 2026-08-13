@@ -40,17 +40,29 @@ test("routeSlash：本地命令 vs host 命令", () => {
 	assert.deepEqual(routeSlash("/new"), { local: true, action: "new" });
 	assert.deepEqual(routeSlash("/resume"), { local: true, action: "resume" });
 	assert.deepEqual(routeSlash("/list"), { local: true, action: "list" });
+	assert.equal(routeSlash("/clear").local, true);
+	assert.equal(routeSlash("/clear").action, "clear");
+	assert.match(routeSlash("/clear").notice, /已清空/);
+	assert.deepEqual(routeSlash("/help"), { local: true, action: "help", name: "help" });
+	assert.deepEqual(routeSlash("/?"), { local: true, action: "help", name: "?" });
 	assert.equal(routeSlash("/status").local, false);
 	assert.equal(routeSlash("/status").name, "status");
 	assert.equal(routeSlash(null), null);
 	assert.deepEqual(routeSlash("/"), { local: true, action: "noop", notice: "空命令" });
 });
 
-test("allCommands：合并去重，含本地命令", () => {
+test("allCommands：合并去重，含本地命令含 help", () => {
 	const cmds = allCommands();
 	assert.ok(cmds.some((c) => c.name === "new"));
 	assert.ok(cmds.some((c) => c.name === "status"));
+	assert.ok(cmds.some((c) => c.name === "help"), "应含 help");
 	// exit 去重（builtin + local 各一个）
 	const exits = cmds.filter((c) => c.name === "exit");
 	assert.equal(exits.length, 1);
+});
+
+test("isLocalCommand：help 是本地命令", () => {
+	assert.equal(isLocalCommand("help"), true);
+	// "?" 仅 routeSlash 映射到 help（本地路由），但 LOCAL_COMMANDS 表里没有 "?" 键
+	assert.equal(isLocalCommand("?"), false);
 });

@@ -96,6 +96,15 @@ export async function startInteractive({ baseUrl, sessionId, preset, cwd, mode =
 				conv.state.notice = "已清空客户端会话记忆（不影响 host 上的会话）";
 				conv.emit();
 				break;
+			case "help": {
+				const { allCommands } = await import("../lib/commands.js");
+				const lines = allCommands()
+					.map((c) => `/${c.name}${c.description ? ` — ${c.description}` : ""}`)
+					.join("  ");
+				conv.state.notice = `命令：${lines}`;
+				conv.emit();
+				break;
+			}
 			default:
 				break;
 		}
