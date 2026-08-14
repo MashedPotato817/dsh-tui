@@ -70,16 +70,22 @@ dsh-tui --new | head
 lib/        core 层（零依赖）：client/fold/session/stream/live/vim/hud/policy/... 
 ui/         Ink 组件层
 bin/        cli 入口（interactive + run + list）
-test/       单元飞轮（73 例）
+test/       单元飞轮（116 例）
 test-live/  live 飞轮（真实 host，DSH_TEST_LIVE=1 才跑）
 ```
 
 `lib/index.js` 导出 core API，供 VSCode 集成等复用，不依赖任何 UI。
 
+## 贡献与社区
+
+- 提交 **issue / 需求 / PR**：见 [`CONTRIBUTING.md`](CONTRIBUTING.md)，或用 GitHub 的 issue / PR 模板。
+- 了解项目的 **协同机制与反馈升级飞轮**：见 [`docs/community.md`](docs/community.md) —— 从上报到修复、测试、发布的完整闭环。
+- 社区路线图：见 [dsh-ecosystem](https://github.com/MashedPotato817/dsh-ecosystem)。
+
 ## 开发
 
 ```bash
-npm test          # 单元飞轮（快）
+npm test          # 单元飞轮（快，116 例）
 npm run test:live # live 飞轮（真实 host，会调真实模型）
 npm run flywheel  # --watch 快速迭代
 ```

@@ -1,0 +1,61 @@
+name: 反馈 Bug
+description: 提交一个 dsh-tui 的缺陷
+title: "[bug] 简述问题"
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢报告！请尽量填写完整信息，这能显著加快定位与修复。
+        请先搜索现有 issue 看是否已有人提过。
+  - type: input
+    id: os
+    attributes:
+      label: 操作系统 / 终端
+      description: 例如 Windows + Windows Terminal、macOS + iTerm2
+    validations:
+      required: true
+  - type: input
+    id: node
+    attributes:
+      label: Node 版本
+      description: "执行 `node -v`"
+    validations:
+      required: true
+  - type: input
+    id: dsh
+    attributes:
+      label: DSH host 版本
+      description: "执行 `dsh --version`"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: 复现步骤
+      description: 怎么稳定触发？输入了什么、看到了什么。
+      placeholder: |
+        1. 运行 dsh-tui
+        2. 输入「xxx」并回车
+        3. 现象：消息卡在 pending / HUD 错位 / 跳顶 / 崩溃
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为 vs 实际行为
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 现象 / 日志 / 截图
+      description: 终端输出、错误信息、截图（拖入即可）
+  - type: dropdown
+    id: freq
+    attributes:
+      label: 出现频率
+      options:
+        - 每次都出现
+        - 偶尔出现
+        - 只在特定操作后

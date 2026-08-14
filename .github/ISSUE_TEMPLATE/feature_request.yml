@@ -1,0 +1,39 @@
+name: 功能需求
+description: 提出一个新功能或改进建议
+title: "[feat] 简述需求"
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        请说明你想要的能力与使用场景。dsh-tui 以 Claude Code / OpenCode / Codex 为对标，请在适用处标注「对标 XXX」。
+  - type: textarea
+    id: scenario
+    attributes:
+      label: 使用场景
+      description: 你在什么情况下需要这个能力？
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+      description: 希望你输入/看到什么？
+    validations:
+      required: true
+  - type: dropdown
+    id: reference
+    attributes:
+      label: 对标参考
+      description: 这个能力是否对标某个成熟产品？
+      options:
+        - Claude Code
+        - OpenCode
+        - Codex CLI
+        - 其它 / 自研
+        - 无对标，纯新需求
+  - type: textarea
+    id: extra
+    attributes:
+      label: 补充信息
+      description: 参考链接、设计思路等（可选）
