@@ -63,6 +63,67 @@ export function Banner({ hud }) {
 	);
 }
 
+/** 助手正文轻量 Markdown 渲染：代码块/列表/标题/diff/内联粗体+code。 */
+function MarkdownBody({ text }) {
+	const blocks = parseMarkdown(text);
+	const rows = [];
+	blocks.forEach((b, bi) => {
+		if (b.type === "code") {
+			rows.push(
+				h(Box, { key: `c${bi}`, paddingLeft: 2, width: "100%" },
+					h(Text, { backgroundColor: "#16161e", color: "#d4d4d4" }, String(b.content || "")))
+			);
+		} else if (b.type === "heading") {
+			rows.push(
+				h(Box, { key: `h${bi}`, paddingLeft: 2 },
+					h(Text, { bold: true, color: b.level <= 2 ? "white" : "gray" }, String(b.content || "")))
+			);
+		} else if (b.type === "list") {
+			(b.items || []).forEach((item, ii) => {
+				const marker = b.ordered ? `${b.items.length > 1 ? `${ii + 1}.` : "  "}` : "·";
+				rows.push(
+					h(Box, { key: `l${bi}_${ii}`, paddingLeft: 4 },
+						h(Text, { color: "gray", bold: true }, `${marker} `),
+						...inlineText(item))
+				);
+			});
+		} else if (b.type === "diff") {
+			const dl = String(b.content || "").split("\n");
+			dl.forEach((l, li) => {
+				const color = l.startsWith("+") ? "green" : l.startsWith("-") ? "red" : "dim";
+				rows.push(
+					h(Box, { key: `d${bi}_${li}`, paddingLeft: 4 },
+						h(Text, { color }, l))
+				);
+			});
+		} else {
+			// text（可能含多行，逐行缩进到 "●" 之后）
+			const tl = String(b.content || "").split("\n");
+			tl.forEach((l, li) => {
+				// 第一行挂到 ● 锚点；后续行缩进
+				rows.push(
+					h(Box, { key: `t${bi}_${li}`, paddingLeft: li === 0 ? 2 : 4 },
+						...inlineText(l))
+				);
+			});
+		}
+	});
+	// 首行前放 ● 锚点
+	if (rows.length) {
+		rows[0] = h(Box, { key: "anchor-row" },
+			h(Text, { color: "magenta", bold: true }, "● "),
+			h(Box, { flexDirection: "column" }, rows[0])
+		);
+	}
+	return h(Box, { flexDirection: "column" }, ...rows);
+}
+
+function inlineText(line) {
+	return inlineFragments(String(line)).map((f, i) =>
+		h(Text, { key: i, bold: f.kind === "bold", backgroundColor: f.kind === "code" ? "#16161e" : undefined, color: f.kind === "code" ? "#d4d4d4" : f.kind === "bold" ? "white" : undefined }, f.content)
+	);
+}
+
 function MessageRow({ message, currentNow = null }) {
 	const { role, text, pending, injected } = message;
 	const body = String(text || "");
@@ -101,8 +162,8 @@ function MessageRow({ message, currentNow = null }) {
 			suffix ? h(Text, { color: warn ? "#ff7777" : "#bbbbbb" }, `  ${suffix}`) : null
 		);
 	}
-	// assistant：小圆点作为轮次锚点（Claude Code 风格），正文保持宽松留白 + 缩进。
-	// host 回了但没生成文本时给明确占位。
+	// assistant：小圆点作为轮次锚点，正文走轻量 Markdown 渲染（code/列表/标题/diff/inline，
+	// Claude Code 风格），避免直接显示原始标记。
 	if (!body) {
 		return h(
 			Box,
@@ -111,20 +172,7 @@ function MessageRow({ message, currentNow = null }) {
 			h(Text, { dim: true, color: "gray" }, "（已收到回复，但模型未生成文本内容）")
 		);
 	}
-	const lines = body.split("\n");
-	const first = lines[0];
-	const rest = lines.slice(1);
-	return h(
-		Box,
-		{ flexDirection: "column" },
-		h(
-			Box,
-			{},
-			h(Text, { color: "magenta", bold: true }, "● "),
-			h(Text, {}, first)
-		),
-		...rest.map((l, i) => h(Box, { key: `r${i}`, paddingLeft: 2 }, h(Text, {}, l)))
-	);
+	return h(MarkdownBody, { text: body });
 }
 
 export function ConversationList({ messages, streaming, now }) {
@@ -664,5 +712,6 @@ import { deriveMode, modeLabel } from "../lib/ui-mode.js";
 import { projectDocsLabel } from "../lib/docs.js";
 import { detectIntent, buildMentionCandidates } from "../lib/mention.js";
 import { toolSummary } from "../lib/tool-summary.js";
+import { parseMarkdown, inlineFragments } from "../lib/markdown.js";
 
 const require = createRequire(import.meta.url);

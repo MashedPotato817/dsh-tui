@@ -281,3 +281,14 @@ export function mentionDisplay(c: { file: string }): string;
 
 // ---------- tool-summary ----------
 export function toolSummary(tool: { name?: string; args?: string }, limit?: number): string;
+
+// ---------- markdown ----------
+export type MarkdownBlock =
+  | { type: "text"; content: string }
+  | { type: "code"; lang: string; content: string }
+  | { type: "heading"; level: number; content: string }
+  | { type: "list"; ordered: boolean; items: Array<string> }
+  | { type: "diff"; content: string };
+export function parseMarkdown(text: string): Array<MarkdownBlock>;
+export type InlineFragment = { kind: "text" | "bold" | "code"; content: string };
+export function inlineFragments(text: string): Array<InlineFragment>;
