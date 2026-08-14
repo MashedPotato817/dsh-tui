@@ -332,3 +332,17 @@ export function hasAnyUsage(u: UsageBuckets | null): boolean;
 export const GLOBAL_MODES: { CHAT: string; APPROVING: string; COMMAND: string; COMPLETE: string; HISTORY: string; HELP: string };
 export function transitionMode(from: string, to: string): { ok: boolean; to: string | null };
 export function keyOwner(mode: string, key: { key?: string; ctrl?: boolean; shift?: boolean; meta?: boolean }): string | null;
+
+// ---------- queue ----------
+export interface ModalQueueTask {
+  id: number;
+  result: Promise<void>;
+  cancel: () => void;
+}
+export interface ModalQueue {
+  enqueue(what: string, run: (signal: AbortSignal) => Promise<void>, opts?: { priority?: number }): ModalQueueTask;
+  activeId(): number | null;
+  queuedCount(): number;
+  hasPending(): boolean;
+}
+export function createModalQueue(opts?: { now?: () => number }): ModalQueue;
