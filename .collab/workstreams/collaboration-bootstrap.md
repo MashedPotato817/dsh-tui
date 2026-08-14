@@ -1,6 +1,6 @@
 # Workstream: collaboration-bootstrap
 
-- Status: in-progress
+- Status: review
 - Branch: feat/dsh-tui
 - Worktree: C:/Users/zhntd/Desktop/game/dsh-tui
 - Implementer: Codex
@@ -32,10 +32,12 @@ DSH Collaboration Hub；现有 dsh-tui CI 与贡献流程。
 | Commit | Meaning | Verification |
 |---|---|---|
 | 22bcd69 | 本次治理前产品基线 | existing branch clean |
+| d9a0af2 | 接入仓库级协同治理 | governance、186 tests、typecheck passed |
 
 ## Activity log
 
 - 2026-08-14：认领治理文件范围。
+- 2026-08-14：完成治理接入；npm 入口损坏，已用等价 Node/TypeScript 命令验证。
 
 ## Risks and rollback
 
