@@ -7,8 +7,9 @@ test("sanitizeControlChars：转义 C0 控制字符，保留可见文本", () =>
 	assert.equal(sanitizeControlChars("hello"), "hello");
 	// ESC 0x1b、BEL 0x07、NUL 0x00 → �
 	assert.equal(sanitizeControlChars("a\x1b[31mb\x07c\x00d"), "a�[31mb�c�d");
-	// 换行是 C0（0x0a）→ �
-	assert.equal(sanitizeControlChars("a\nb"), "a�b");
+	// 换行 \n / 回车 \r 必须保留（多行正文与代码块依赖它；0x0a/0x0d 不再被吞）
+	assert.equal(sanitizeControlChars("a\nb"), "a\nb");
+	assert.equal(sanitizeControlChars("a\rb"), "a\rb");
 });
 
 test("sanitizeControlChars：\\t 展开为空格，非转义空白保留", () => {

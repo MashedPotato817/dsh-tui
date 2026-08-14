@@ -63,8 +63,9 @@ export function Banner({ hud }) {
 	);
 }
 
-/** 助手正文轻量 Markdown 渲染：代码块/列表/标题/diff/内联粗体+code。 */
-function MarkdownBody({ text }) {
+/** 助手正文轻量 Markdown 渲染：代码块/列表/标题/diff/内联粗体+code。
+ *  fromLine/maxLines：行级视口裁剪（单条超长消息内部分页用）。按「已渲染视觉行」切片。 */
+function MarkdownBody({ text, fromLine = 0, maxLines = Infinity }) {
 	// 已定稿消息用有界缓存解析，避免每秒 `now` 重绘时重复 parse 长正文（pi-tui 行缓存思路）。
 	const blocks = cachedParseMarkdown(text);
 	const rows = [];
@@ -109,14 +110,16 @@ function MarkdownBody({ text }) {
 			});
 		}
 	});
-	// 首行前放 ● 锚点
-	if (rows.length) {
-		rows[0] = h(Box, { key: "anchor-row" },
+	// 行级裁剪：只保留 [fromLine, fromLine+maxLines) 的视觉行（供长消息内部分页）。
+	const sliced = rows.slice(Math.max(0, fromLine), Math.max(0, fromLine) + (Number.isFinite(maxLines) ? maxLines : Infinity));
+	// 首行前放 ● 锚点（仅当从消息头开始渲染），被裁剪后首行锚点略去以免误导。
+	if (sliced.length && fromLine <= 0) {
+		sliced[0] = h(Box, { key: "anchor-row" },
 			h(Text, { color: "magenta", bold: true }, "● "),
-			h(Box, { flexDirection: "column" }, rows[0])
+			h(Box, { flexDirection: "column" }, sliced[0])
 		);
 	}
-	return h(Box, { flexDirection: "column" }, ...rows);
+	return h(Box, { flexDirection: "column" }, ...sliced);
 }
 
 function inlineText(line) {
@@ -125,7 +128,7 @@ function inlineText(line) {
 	);
 }
 
-function MessageRow({ message, currentNow = null }) {
+function MessageRow({ message, currentNow = null, fromLine = 0, maxLines = Infinity }) {
 	const { role, text, pending, injected } = message;
 	// 转义外部文本里可能注入的控制字符（ESC/BEL/NUL 等），防破坏布局/终端转义。
 	const body = sanitizeControlChars(String(text || ""));
@@ -154,13 +157,17 @@ function MessageRow({ message, currentNow = null }) {
 		}
 		// 用户消息：整行暗灰背景横条（对标 Claude Code），只在开头保留很暗的 `>`，
 		// 让用户输入与 assistant 正文自然分组；pending 用状态前缀提示。
+		// 行级视口：对边界消息裁掉 fromLine 之前的原始行（用户消息一般短，线性切分足够）。
+		const clippedBody = fromLine > 0
+			? body.split("\n").slice(Math.max(0, fromLine)).join("\n")
+			: body;
 		const badge = pending ? (warn ? "⚠" : "⟳") : ">";
 		const bg = "#333333";
 		return h(
 			Box,
 			{ key: undefined, width: "100%", paddingX: 1, backgroundColor: bg },
 			h(Text, { bold: true, color: warn ? "red" : "green" }, `${badge} `),
-			h(Text, { color: warn ? "#ff7777" : undefined }, body),
+			h(Text, { color: warn ? "#ff7777" : undefined }, clippedBody),
 			suffix ? h(Text, { color: warn ? "#ff7777" : "#bbbbbb" }, `  ${suffix}`) : null
 		);
 	}
@@ -174,16 +181,26 @@ function MessageRow({ message, currentNow = null }) {
 			h(Text, { dim: true, color: "gray" }, "（已收到回复，但模型未生成文本内容）")
 		);
 	}
-	return h(MarkdownBody, { text: body });
+	return h(MarkdownBody, { text: body, fromLine, maxLines });
 }
 
 export function ConversationList({ messages, streaming, now, viewport }) {
-	// 按「终端视觉行预算」从最新往前保留尾部（viewport 纯函数算出 start 下标）。
-	// 修复根因：旧实现按消息条数 WINDOW=60 截断，一条 Markdown/代码块消息几十个视觉行，
-	// 会把输入区/HUD 顶出屏幕、视口跳回第一轮。
-	const start = viewport ? viewport.start : Math.max(0, messages.length - 60);
-	const visible = start > 0 ? messages.slice(start) : messages;
-	const rows = visible.map((m, i) => h(MessageRow, { key: typeof m.seq === "number" && m.seq >= 0 ? m.seq : `idx-${start + i}`, message: m, currentNow: now }));
+	// 行级视口：viewport = { startMsg, startLine }（windowViewport 产出）。
+	// startLine 仅在边界（最上面那条）生效，实现单条长消息内部分页。
+	// 修复根因：旧实现按消息条数/整条截断，一条超长消息会把输入区顶走或整片消失。
+	const startMsg = viewport ? viewport.startMsg : Math.max(0, messages.length - 60);
+	const startLine = viewport ? (viewport.startLine || 0) : 0;
+	const visible = startMsg > 0 ? messages.slice(startMsg) : messages;
+	const rows = visible.map((m, i) => {
+		const isBoundary = i === 0;
+		return h(MessageRow, {
+			key: typeof m.seq === "number" && m.seq >= 0 ? m.seq : `idx-${startMsg + i}`,
+			message: m,
+			currentNow: now,
+			fromLine: isBoundary ? startLine : 0,
+			maxLines: Infinity
+		});
+	});
 	if (streaming && streaming.text) {
 		rows.push(h(Box, { key: "stream" }, h(Text, { color: "cyan", bold: true }, "● "), h(Text, { dim: true }, sanitizeControlChars(String(streaming.text)))));
 	}
@@ -457,9 +474,10 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 	const [mentionActive, setMentionActive] = useState(0);
 	// 每秒刷新时钟（pending 超时提示用）
 	const [now, setNow] = useState(() => Date.now());
-	// 应用级 follow-tail：viewOffset>0 表示用户上翻离开了底部（followTail=false），
+	// 应用级 follow-tail：scrollLines>0 表示用户上翻离开了底部（followTail=false），
 	// 此时 streaming/工具/计时不得把阅读锚点拉回；End/Ctrl+End 归零回到底部。
-	const [viewOffset, setViewOffset] = useState(0);
+	// 单位是「视觉行」，支持在单条超长消息内部按行分页（而不仅是整条消息）。
+	const [scrollLines, setScrollLines] = useState(0);
 	// 终端尺寸（columns/rows）：用于按视觉行预算裁剪消息区，长历史不顶走输入区；resize 会触发重渲染。
 	const { columns, rows } = useWindowSize();
 
@@ -628,11 +646,12 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 			conv.cancelTurn();
 			return;
 		}
-		// 应用级历史翻页（不依赖 WT 原生 scrollback）：PageUp/PageDown 翻，End 回底部。
-		// viewOffset>0 表示离开底部；新内容到达不会拉回（followTail=false 语义）。
-		if (key.pageUp) { setViewOffset((o) => o + 1); return; }
-		if (key.pageDown) { setViewOffset((o) => Math.max(0, o - 1)); return; }
-		if ((key.end) || (key.ctrl && key.end)) { setViewOffset(0); return; }
+		// 应用级历史翻页（不依赖 WT 原生 scrollback）：PageUp/PageDown 按「视觉行页」翻，End 回底部。
+		// scrollLines>0 表示离开底部；新内容到达不会拉回（followTail=false 语义）。
+		const pageLines = Math.max(3, Math.floor((rows || 30) / 2)); // 一页≈半个消息区高，行级粒度
+		if (key.pageUp) { setScrollLines((o) => o + pageLines); return; }
+		if (key.pageDown) { setScrollLines((o) => Math.max(0, o - pageLines)); return; }
+		if ((key.end) || (key.ctrl && key.end)) { setScrollLines(0); return; }
 
 		const currentText = submitText(vim);
 		// @ 文件引用补全面板导航（OpenCode 心智）：Tab/方向键循环，Enter 把选中文件插入输入。
@@ -746,7 +765,8 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 	})();
 
 	// 计算消息区可视预算：终端高 − 固定元素（banner/hud/input/worked/docks/余量），
-	// 再用 tailWithinBudget 从最新往前保留尾部。修 root cause：消息条数截断改为视觉行预算截断。
+	// 再用 windowViewport 得到「行级窗口」起始消息 + 消息内起始行。修 root cause：
+	// 消息条数/整条截断改为行级视口截断，单条超长消息内也可分页。
 	const docksRows =
 		((snapshot.pendingApprovals && snapshot.pendingApprovals.length ? 3 + snapshot.pendingApprovals.length : 0) +
 			((snapshot.tools && snapshot.tools.length ? Math.min(snapshot.tools.length, 5) + 1 : 0)) +
@@ -765,11 +785,9 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		stream: streamRows,
 		margin: 2
 	});
-	const tail = tailWithinBudget(snapshot.messages, msgBudget, columns || 80);
-	// 应用 follow-tail：viewOffset=0 跟随最新尾部；>0 则把视口起点往前推（看更早历史），
-	// 并保证不越界。新内容到达时，只要 viewOffset>0 就保持用户锚点（不自动跳回）。
-	const start = Math.max(0, tail.start - viewOffset * Math.max(1, Math.floor(msgBudget / 2)));
-	const viewport = { start, lines: tail.lines };
+	// 行级视口：windowViewport 产出 { startMsg, startLine }；贴底(scrollLines=0)跟随最新尾部，
+	// scrollLines>0 则按视觉行上翻（支持单条长消息内部分页）。绝不返回空窗口。
+	const viewport = windowViewport(snapshot.messages, msgBudget, columns || 80, scrollLines);
 
 	return h(
 		Box,
@@ -781,7 +799,7 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 			workedLabel
 				? h(Box, { key: "worked", marginTop: 1 }, h(Text, { dim: true, color: "gray" }, workedLabel))
 				: null,
-			viewOffset > 0
+			scrollLines > 0
 				? h(Box, { key: "follow-hint", marginTop: 1 },
 						h(Text, { dim: true, color: "cyan" }, "↓ 上面还有历史 · End 回到底部"))
 				: null,
@@ -819,7 +837,7 @@ import { projectDocsLabel } from "../lib/docs.js";
 import { detectIntent, buildMentionCandidates, mentionRef } from "../lib/mention.js";
 import { toolSummary } from "../lib/tool-summary.js";
 import { cachedParseMarkdown, inlineFragments } from "../lib/markdown.js";
-import { tailWithinBudget, messageBudget, displayWidth } from "../lib/viewport.js";
+import { windowViewport, messageBudget, displayWidth } from "../lib/viewport.js";
 import { sanitizeControlChars } from "../lib/safety.js";
 import { scanWorkspace } from "../lib/scan.js";
 

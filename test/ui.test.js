@@ -36,6 +36,27 @@ test("App 树 renderToString 不崩，含 HUD/消息", () => {
 	assert.ok(output.includes("model") || output.includes("PTC"), "HUD 保留运行指标");
 });
 
+test("App 渲染：超长回复不得整片消失（P0 回归）", () => {
+	const conv = fakeConv();
+	// 最新一条 ~58 行、远超消息区预算，旧实现会返回空消息区（只剩 Worked for）。
+	const longText = Array.from({ length: 58 }, (_, i) => `第 ${i + 1} 行内容`).join("\n");
+	conv.state.messages = [
+		{ role: "user", seq: 1, text: "请给我一段很长的回答" },
+		{ role: "assistant", seq: 2, text: longText, usage: { inputTokens: 50, outputTokens: 2000 } }
+	];
+	const output = renderToString(
+		React.createElement(App, {
+			conv,
+			session: { sessionId: "session-abcdef123456", agentPreset: "code", cwd: "C:\\work" },
+			onCommand: () => {},
+			onExit: () => {}
+		})
+	);
+	// 修复后：最新长回复的尾部至少应可见若干行；不能只剩「Worked for」而无任何正文。
+	const hasBody = /第\s*\d+\s*行内容/.test(output);
+	assert.ok(hasBody, "超长回复应至少有尾部可见，而非整片空白");
+});
+
 test("hudState + renderToString：流式草稿渲染", () => {
 	const hud = hudState({
 		view: { ...initialState(), messages: [], streaming: null, running: true, model: "deepseek-chat" },
