@@ -257,6 +257,7 @@ export function diffLinesFrom(meta: unknown): Array<string>;
 export function classifyDiffLines(lines: Array<string>): Array<{ tag: string; text: string }>;
 export function diffStats(lines: Array<string>): { add: number; del: number };
 export function diffSummary(stats: { add: number; del: number }): string;
+export function guardDiff(lines: Array<string>, opts?: { maxLines?: number; maxAddDel?: number }): { ok: boolean; reason?: "too_many_lines" | "too_many_changes"; add: number; del: number };
 
 // ---------- ui-mode ----------
 export const UI_MODES: Record<string, string>;
@@ -299,3 +300,8 @@ export function wrapLines(text: string, columns: number): number;
 export function estimateMessageRows(msg: { role?: string; text?: string }, columns: number, opts?: { userIndent?: number }): number;
 export function tailWithinBudget(messages: Array<{ text?: string; role?: string }>, budget: number, columns: number): { start: number; lines: number };
 export function messageBudget(terminalRows: number, fixed?: object): number;
+
+// ---------- safety ----------
+export function sanitizeControlChars(text: string): string;
+export function hasControlChars(text: string | null): boolean;
+export function safeSingleLine(text: string, max?: number): string;

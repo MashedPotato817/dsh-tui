@@ -126,7 +126,8 @@ function inlineText(line) {
 
 function MessageRow({ message, currentNow = null }) {
 	const { role, text, pending, injected } = message;
-	const body = String(text || "");
+	// 转义外部文本里可能注入的控制字符（ESC/BEL/NUL 等），防破坏布局/终端转义。
+	const body = sanitizeControlChars(String(text || ""));
 	// 注入上下文（agent-instructions / plugin 的运行时说明）不是日常对话，
 	// 弱化显示并折叠成一行，避免污染会话视图。
 	if (injected) {
@@ -183,7 +184,7 @@ export function ConversationList({ messages, streaming, now, viewport }) {
 	const visible = start > 0 ? messages.slice(start) : messages;
 	const rows = visible.map((m, i) => h(MessageRow, { key: typeof m.seq === "number" && m.seq >= 0 ? m.seq : `idx-${start + i}`, message: m, currentNow: now }));
 	if (streaming && streaming.text) {
-		rows.push(h(Box, { key: "stream" }, h(Text, { color: "cyan", bold: true }, "● "), h(Text, { dim: true }, String(streaming.text))));
+		rows.push(h(Box, { key: "stream" }, h(Text, { color: "cyan", bold: true }, "● "), h(Text, { dim: true }, sanitizeControlChars(String(streaming.text)))));
 	}
 	return h(Box, { flexDirection: "column" }, ...rows);
 }
@@ -313,16 +314,20 @@ export function ToolCards({ tools, limit = 5 }) {
 		);
 		// diff 预览：若工具结果带了 diff meta，展示 +/一行 统计。
 		if (t.diffMeta) {
-			const stats = diffStats(diffLinesFrom(t.diffMeta));
+			const dl = diffLinesFrom(t.diffMeta);
+			const stats = diffStats(dl);
 			if (stats.add || stats.del) {
+				const guard = guardDiff(dl);
 				rows.push(
 					h(Box, { key: `${t.callId}-diff`, paddingX: 3 },
 						h(Text, { color: stats.add ? "green" : "dim" }, `  ${diffSummary(stats)}`),
-						diffPreviewLines(t.diffMeta).map((l, i) =>
-							h(Box, { key: `${t.callId}-d${i}`, paddingX: 3 },
-								h(Text, { color: l.startsWith("+") ? "green" : l.startsWith("-") ? "red" : "dim" }, l)
-							)
-						)
+						guard.ok
+							? diffPreviewLines(t.diffMeta).map((l, i) =>
+									h(Box, { key: `${t.callId}-d${i}`, paddingX: 3 },
+										h(Text, { color: l.startsWith("+") ? "green" : l.startsWith("-") ? "red" : "dim" }, l)
+									)
+								)
+							: h(Text, { dim: true, color: "gray" }, `  (diff 过大，已折叠 ${dl.length} 行)`)
 					)
 				);
 			}
@@ -762,12 +767,13 @@ import { createRequire } from "node:module";
 import { allCommands as allCommandsFn } from "../lib/commands.js";
 import { loadCustomCommands } from "../lib/command-loader.js";
 import { createHistory, pushHistory, navigateHistory } from "../lib/history.js";
-import { diffLinesFrom, classifyDiffLines, diffStats, diffSummary } from "../lib/diff.js";
+import { diffLinesFrom, classifyDiffLines, diffStats, diffSummary, guardDiff } from "../lib/diff.js";
 import { deriveMode, modeLabel } from "../lib/ui-mode.js";
 import { projectDocsLabel } from "../lib/docs.js";
 import { detectIntent, buildMentionCandidates } from "../lib/mention.js";
 import { toolSummary } from "../lib/tool-summary.js";
 import { parseMarkdown, inlineFragments } from "../lib/markdown.js";
 import { tailWithinBudget, messageBudget, displayWidth } from "../lib/viewport.js";
+import { sanitizeControlChars } from "../lib/safety.js";
 
 const require = createRequire(import.meta.url);
