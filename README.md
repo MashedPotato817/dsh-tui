@@ -70,7 +70,7 @@ dsh-tui --new | head
 lib/        core 层（零依赖）：client/fold/session/stream/live/vim/hud/policy/... 
 ui/         Ink 组件层
 bin/        cli 入口（interactive + run + list）
-test/       单元飞轮（116 例）
+test/       单元飞轮（118 例）
 test-live/  live 飞轮（真实 host，DSH_TEST_LIVE=1 才跑）
 ```
 
@@ -85,7 +85,7 @@ test-live/  live 飞轮（真实 host，DSH_TEST_LIVE=1 才跑）
 ## 开发
 
 ```bash
-npm test          # 单元飞轮（快，116 例）
+npm test          # 单元飞轮（快，118 例）
 npm run test:live # live 飞轮（真实 host，会调真实模型）
 npm run flywheel  # --watch 快速迭代
 ```

@@ -3,10 +3,21 @@
 //   dsh-tui [--new|--resume|--session <id>]   # TTY: 交互 TUI；否则列出会话
 //   dsh-tui run <prompt> [--session <id>|--resume] [--preset <id>] [--cwd <dir>]
 //     # 一次性调用（默认新建 PTC 会话 → 打印回复）
+import { createRequire } from "node:module";
+import { resolveVersion } from "../lib/version.js";
 import { DshClient } from "../lib/client.js";
 import { Session, PTC_PRESET } from "../lib/session.js";
 import { lastAssistantText } from "../lib/fold.js";
 import { startInteractive } from "./interactive.js";
+
+const require = createRequire(import.meta.url);
+const pkgVersion = (() => {
+	try {
+		return resolveVersion(require("../package.json"));
+	} catch {
+		return resolveVersion(null);
+	}
+})();
 
 const baseUrl = process.env.DSH_URL ?? "http://127.0.0.1:3080";
 const client = new DshClient(baseUrl);
@@ -64,7 +75,7 @@ async function main() {
 	const args = process.argv.slice(2);
 
 	if (args[0] === "--version" || args[0] === "-v") {
-		console.log(process.env.npm_package_version ?? "0.1.0");
+		console.log(pkgVersion);
 		return;
 	}
 
