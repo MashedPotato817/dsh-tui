@@ -153,11 +153,14 @@ export function Notice({ notice }) {
 export function CommandInput({ vim }) {
 	const text = submitText(vim);
 	const insert = vim.mode === "insert";
+	// insert 模式：Claude Code 风格的 `>` 命令提示 + 光标；normal 模式：保留 NORMAL 徽标可见编辑。
+	const prompt = insert ? h(Text, { color: "green", bold: true }, "> ") : h(Text, { color: "yellow", bold: true }, "∶ ");
 	return h(
 		Box,
 		{ borderStyle: "single", borderColor: insert ? "green" : "cyan", paddingX: 1 },
-		h(Text, { color: insert ? "green" : "yellow", bold: true }, insert ? " INSERT " : " NORMAL "),
-		h(Text, {}, ` ${text}${insert ? "▌" : ""}`)
+		insert ? h(Text, { color: "green", bold: true }, " INSERT ") : h(Text, { color: "yellow", bold: true }, " NORMAL "),
+		prompt,
+		h(Text, {}, `${text}${insert ? "▌" : ""}`)
 	);
 }
 
@@ -529,7 +532,9 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 			h(Banner, { hud }),
 			ConversationList({ messages: snapshot.messages, streaming: snapshot.streaming, now }),
 			snapshot.messages.length === 0 && !(snapshot.streaming && snapshot.streaming.text)
-				? h(Text, { key: "empty", dim: true }, "( 空会话 — 直接输入，Enter 发送，/ 命令 )")
+				? h(Box, { key: "empty", flexDirection: "column", marginTop: 1 },
+						h(Text, { dim: true }, "开始对话 — 直接输入并按 Enter 发送。"),
+						h(Text, { dim: true, color: "gray" }, "/ 命令 · i/a/o 输入 · ESC 回 normal · Ctrl+C 中断/双按退出 · ? 帮助"))
 				: null
 		),
 		showHelp ? h(HelpPanel, {}) : null,
