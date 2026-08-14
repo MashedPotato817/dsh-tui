@@ -758,10 +758,24 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 	const workedLabel = (() => {
 		if (snapshot.running) return null;
 		if (!snapshot.turnStartTime || !snapshot.lastTurnEnd) return null;
-		const dur = formatDuration(now - snapshot.turnStartTime);
+		// 用回合真实结束时间 turnEndedAt 计算时长（旧实现用会继续增长的 now，导致已完成回合的数字每秒上涨）。
+		const endAt = snapshot.turnEndedAt ?? now;
+		const dur = formatDuration(endAt - snapshot.turnStartTime);
 		// 追加分相计时（Thinking/Response/Tools），如 `✻ Worked for 8s · Thinking 2.0s`
 		const phase = snapshot.phaseTiming ? ` · ${snapshot.phaseTiming}` : "";
 		return dur ? `✻ Worked for ${dur}${phase}` : snapshot.phaseTiming;
+	})();
+
+	// 运行中阶段反馈（P1 #6）：不暴露私有思维链，只显示安全阶段 + 已耗时。
+	// reasoning-delta → thinking；text-delta → responding；tool-call → tools。
+	const PHASE_LABEL = { thinking: "思考", responding: "生成", tools: "工具执行" };
+	const runningPhaseLabel = (() => {
+		if (!snapshot.running) return null;
+		const phase = snapshot.activePhase;
+		const elapsed = snapshot.turnStartTime ? formatDuration(now - snapshot.turnStartTime) : "";
+		const label = phase ? PHASE_LABEL[phase] ?? phase : "运行中";
+		const spinner = snapshot.running ? "◐" : "";
+		return `${spinner} ${label}${elapsed ? ` · ${elapsed}` : ""}（Ctrl+C 中断）`;
 	})();
 
 	// 计算消息区可视预算：终端高 − 固定元素（banner/hud/input/worked/docks/余量），
@@ -781,8 +795,9 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		hud: 1,
 		input: 2,
 		worked: workedLabel ? 1 : 0,
-		docks: docksRows,
 		stream: streamRows,
+		phase: runningPhaseLabel ? 1 : 0,
+		docks: docksRows,
 		margin: 2
 	});
 	// 行级视口：windowViewport 产出 { startMsg, startLine }；贴底(scrollLines=0)跟随最新尾部，
@@ -795,6 +810,9 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		// 消息区：全部消息 + 流式草稿（普通渲染，一次可见，不用 <Static> 以避免漏显）。
 		h(Box, { flexDirection: "column", flexGrow: 1, minHeight: 2 },
 			h(Banner, { hud }),
+			runningPhaseLabel
+				? h(Box, { key: "running-phase", paddingX: 1 }, h(Text, { color: "cyan", bold: true }, runningPhaseLabel))
+				: null,
 			ConversationList({ messages: snapshot.messages, streaming: snapshot.streaming, now, viewport }),
 			workedLabel
 				? h(Box, { key: "worked", marginTop: 1 }, h(Text, { dim: true, color: "gray" }, workedLabel))
