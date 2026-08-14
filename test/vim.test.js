@@ -2,7 +2,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createVim, vimKey, submitText, MODES } from "../lib/vim.js";
-
 /** 连续按键，返回最终 state（忽略中间 action）。多字符字符串按字符拆分。 */
 function typeKeys(initial, keys) {
 	let state = initial;
@@ -223,4 +222,21 @@ test("多行输入：Shift+Enter / Ctrl+J 在 insert 光标处切行，Enter 才
 	const submit = vimKey(r2.state, "enter");
 	assert.equal(submit.action, "submit");
 	assert.equal(submitText(submit.state), "ab\n\nc");
+});
+
+test("Claude Code 心智：ESC 回 normal（保留草稿），再按一次 ESC 且非空则清空整框", () => {
+	let state = createVim();
+	state = vimKey(state, "i").state; // insert
+	state = typeKeys(state, ["h", "i", "!"]); // "hi!"
+	// 第一次 ESC → 回 normal，草稿保留
+	const esc1 = vimKey(state, "escape");
+	assert.equal(esc1.state.mode, MODES.NORMAL);
+	assert.equal(submitText(esc1.state), "hi!", "第一次 ESC 不清空草稿");
+	// 第二次 ESC（normal 且非空）→ 清空
+	const esc2 = vimKey(esc1.state, "escape");
+	assert.equal(esc2.state.mode, MODES.NORMAL);
+	assert.equal(submitText(esc2.state), "", "第二次 ESC 应清空整个输入");
+	// 第三次（现在空了）→ 不再清，保持空
+	const esc3 = vimKey(esc2.state, "escape");
+	assert.equal(submitText(esc3.state), "");
 });

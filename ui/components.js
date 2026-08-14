@@ -624,6 +624,20 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 			}
 		}
 
+		// Claude Code 心智：编辑输入时（insert、单行 buffer、无补全面板）用 ↑/↓ 召回最近发过的消息。
+		// ↑ 往前翻，↓ 往后（readline 式历史）。已有多行时不触发（留给行内编辑）。
+		if ((key.upArrow || key.downArrow) && vim.mode === "insert" && vim.lines.length === 1) {
+			const activePanelNow = buildSlashPanel(submitText(vim), allCommandsFn(customCommands), { active: slashActive });
+			if (!curMentionCands.length && !(activePanelNow && activePanelNow.items.length)) {
+				const r = navigateHistory(history, key.upArrow ? "up" : "down", submitText(vim));
+				setHistory(r.history);
+				if (r.text !== null) {
+					setVim({ ...createVim(), mode: "insert", insertFirst: true, lines: [r.text], cursor: { row: 0, col: r.text.length } });
+				}
+				return;
+			}
+		}
+
 		const result = processInput(vim, input, key);
 		setVim(result.state);
 
