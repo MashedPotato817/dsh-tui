@@ -58,11 +58,12 @@ function MessageRow({ message }) {
 			h(Text, {}, body)
 		);
 	}
+	// assistant：host 回了但没生成文本时给明确占位，避免显示成空行/像没返回。
 	return h(
 		Box,
 		{},
 		h(Text, { bold: true, color: "magenta" }, "◉ "),
-		h(Text, {}, body)
+		body ? h(Text, {}, body) : h(Text, { dim: true, color: "gray" }, "（已收到回复，但模型未生成文本内容）")
 	);
 }
 

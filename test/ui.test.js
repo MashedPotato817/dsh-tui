@@ -135,3 +135,20 @@ test("App 渲染：子代理 Dock 显示 fork 出的子代理", () => {
 	assert.ok(output.includes("子代理"), "应渲染子代理面板标题");
 	assert.ok(output.includes("session-child-1"), "应显示子代理 sessionId");
 });
+
+test("App 渲染：空 assistant 回复显示占位而非空行", () => {
+	const conv = fakeConv();
+	conv.state.messages = [
+		{ role: "user", seq: 1, text: "问" },
+		{ role: "assistant", seq: 2, text: "" } // host 回了但没文本
+	];
+	const output = renderToString(
+		React.createElement(App, {
+			conv,
+			session: { sessionId: "session-abcdef123456", agentPreset: "code", cwd: "C:\\work" },
+			onCommand: () => {},
+			onExit: () => {}
+		})
+	);
+	assert.ok(output.includes("未生成文本内容"), "空回复应显示占位提示");
+});
