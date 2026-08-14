@@ -35,7 +35,7 @@ export function HUD({ hud, uiMode }) {
 	);
 }
 
-function MessageRow({ message }) {
+function MessageRow({ message, currentNow = null }) {
 	const { role, text, pending, injected } = message;
 	const body = String(text || "");
 	// 注入上下文（agent-instructions / plugin 的运行时说明）不是日常对话，
@@ -51,11 +51,18 @@ function MessageRow({ message }) {
 		);
 	}
 	if (role === "user") {
+		// pending 超时提示：超过 8s 未落定 → 显示已等待时长 + 提示（不无限挂 ⟳）
+		let pendingSuffix = "";
+		if (pending) {
+			const elapsed = currentNow - (message.time || message.sentAt || 0);
+			pendingSuffix = elapsed > 8000 ? ` （仍在处理… ${Math.round(elapsed / 1000)}s）` : "";
+		}
 		return h(
 			Box,
 			{ key: undefined },
-			h(Text, { bold: true, color: "green" }, pending ? "⟳ " : "❯ "),
-			h(Text, {}, body)
+			h(Text, { bold: true, color: pending ? (pendingSuffix ? "yellow" : "green") : "green" }, pending ? "⟳ " : "❯ "),
+			h(Text, {}, body),
+			pendingSuffix ? h(Text, { dim: true, color: "yellow" }, pendingSuffix) : null
 		);
 	}
 	// assistant：host 回了但没生成文本时给明确占位，避免显示成空行/像没返回。
@@ -67,10 +74,10 @@ function MessageRow({ message }) {
 	);
 }
 
-export function ConversationList({ messages, streaming }) {
+export function ConversationList({ messages, streaming, now }) {
 	// 渲染全部消息（落定 + pending + 注入），普通 Box 一次渲染，可靠可见。
 	// key：有真实 seq 用 seq，否则用索引（pending 行 seq=-1 不可作 key，避免 -1 冲突）。
-	const rows = messages.map((m, i) => h(MessageRow, { key: typeof m.seq === "number" && m.seq >= 0 ? m.seq : `idx-${i}`, message: m }));
+	const rows = messages.map((m, i) => h(MessageRow, { key: typeof m.seq === "number" && m.seq >= 0 ? m.seq : `idx-${i}`, message: m, currentNow: now }));
 	if (streaming && streaming.text) {
 		rows.push(h(Box, { key: "stream" }, h(Text, { dim: true, color: "magenta" }, "◉ "), h(Text, { dim: true }, String(streaming.text))));
 	}
@@ -280,6 +287,13 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 	const [showHelp, setShowHelp] = useState(false);
 	// 命令历史（normal 模态 j/k 翻历史）
 	const [history, setHistory] = useState(() => createHistory());
+	// 每秒刷新时钟（pending 超时提示用）
+	const [now, setNow] = useState(() => Date.now());
+
+	useEffect(() => {
+		const t = setInterval(() => setNow(Date.now()), 1000);
+		return () => clearInterval(t);
+	}, []);
 
 	useEffect(() => {
 		try {
@@ -452,7 +466,7 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		h(HUD, { hud, uiMode }),
 		// 消息区：全部消息 + 流式草稿（普通渲染，一次可见，不用 <Static> 以避免漏显）。
 		h(Box, { flexDirection: "column", flexGrow: 1, minHeight: 2 },
-			ConversationList({ messages: snapshot.messages, streaming: snapshot.streaming }),
+			ConversationList({ messages: snapshot.messages, streaming: snapshot.streaming, now }),
 			snapshot.messages.length === 0 && !(snapshot.streaming && snapshot.streaming.text)
 				? h(Text, { key: "empty", dim: true }, "( 空会话 — 直接输入，Enter 发送，/ 命令 )")
 				: null
