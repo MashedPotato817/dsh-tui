@@ -31,7 +31,7 @@ test("isLocalCommand：new/resume/exit 是本地，其它不是", () => {
 	assert.equal(isLocalCommand("new"), true);
 	assert.equal(isLocalCommand("resume"), true);
 	assert.equal(isLocalCommand("exit"), true);
-	assert.equal(isLocalCommand("status"), false);
+	assert.equal(isLocalCommand("status"), true, "/status 现在是本地命令");
 	assert.equal(isLocalCommand("git"), false);
 });
 
@@ -45,8 +45,7 @@ test("routeSlash：本地命令 vs host 命令", () => {
 	assert.match(routeSlash("/clear").notice, /已清空/);
 	assert.deepEqual(routeSlash("/help"), { local: true, action: "help", name: "help" });
 	assert.deepEqual(routeSlash("/?"), { local: true, action: "help", name: "?" });
-	assert.equal(routeSlash("/status").local, false);
-	assert.equal(routeSlash("/status").name, "status");
+	assert.deepEqual(routeSlash("/status"), { local: true, action: "status" }, "/status 现在是本地命令（展示会话状态）");
 	assert.equal(routeSlash(null), null);
 	assert.deepEqual(routeSlash("/"), { local: true, action: "noop", notice: "空命令" });
 });

@@ -103,6 +103,22 @@ export async function startInteractive({ baseUrl, sessionId, preset, cwd, mode =
 				conv.emit();
 				break;
 			}
+			case "status": {
+				// 展示隐藏进 HUD 的会话详情（session ID/模型/上下文/模式/token）。
+				const { hudState, formatCost, formatTokens } = await import("../lib/hud.js");
+				const view = conv.snapshot();
+				const hid = hudState({ view, session: { sessionId: session.sessionId, agentPreset: session.agentPreset, cwd: session.cwd } });
+				const cost = formatCost(hid.costUsd);
+				conv.state.notice =
+					`session ${session.sessionId}` +
+					` | ${hid.modelLabel}` +
+					` | ${hid.mode}${hid.permBadge ? `/${hid.permBadge}` : ""}` +
+					(cost ? ` | ${cost}` : "") +
+					` | ${hid.hasUsage ? `${formatTokens(hid.usage.input)}i/${formatTokens(hid.usage.output)}o` : ""}`.trim() +
+					`${session.cwd ? ` | cwd ${session.cwd}` : ""}`;
+				conv.emit();
+				break;
+			}
 			case "clear":
 				conv.state.notice = "已清空客户端会话记忆（不影响 host 上的会话）";
 				conv.emit();
