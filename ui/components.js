@@ -13,7 +13,7 @@ import { buildSlashPanel } from "../lib/slash.js";
 import { createVim, submitText } from "../lib/vim.js";
 import { processInput } from "../lib/bridge.js";
 import { nextMode, modeBadge, modeColor } from "../lib/permission.js";
-
+import { keyOwner } from "../lib/mode.js";
 /** HUD —— 无框、低对比、单行，`model[1M] · PTC`(左) + `tok · cost · ctx`(右)。
  *  运行指标只保留 essentials；docs/agents/session/cwd/CHAT/manual 都隐藏（前两者 0 时不显示，
  *  cwd/CHAT 在 Banner 与输入区已展示，session 归 /status，permission 已在输入区右侧）。 */
@@ -663,11 +663,14 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 			}
 		}
 
-		// Claude Code 心智：编辑输入时（insert、单行 buffer、无补全面板）用 ↑/↓ 召回最近发过的消息。
-		// ↑ 往前翻，↓ 往后（readline 式历史）。已有多行时不触发（留给行内编辑）。
+		// 用全局 mode 状态机决定 ↑/↓ 归属：补全面板态归 panel，否则对话态才允许历史召回。
+		// 这是 lib/mode.js keyOwner 的应用——让键位归属表成为单一决策源。
+		const uiModeStr = curMentionCands.length || (buildSlashPanel(submitText(vim), allCommandsFn(customCommands), { active: slashActive })?.items?.length > 0) ? "complete" : "chat";
+		// Claude Code 心智：编辑输入时（insert、单行 buffer）用 ↑/↓ 召回最近发过的消息。
+		// KeyOwner 判定 ↑ 归 history/global 时才触发；补全面板打开时归 panel 不触发。
 		if ((key.upArrow || key.downArrow) && vim.mode === "insert" && vim.lines.length === 1) {
-			const activePanelNow = buildSlashPanel(submitText(vim), allCommandsFn(customCommands), { active: slashActive });
-			if (!curMentionCands.length && !(activePanelNow && activePanelNow.items.length)) {
+			const owner = keyOwner(uiModeStr, { key: key.upArrow ? "up" : "down" });
+			if (owner === "global" || owner === "history") {
 				const r = navigateHistory(history, key.upArrow ? "up" : "down", submitText(vim));
 				setHistory(r.history);
 				if (r.text !== null) {
