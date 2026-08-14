@@ -22,3 +22,24 @@ jobs:
         run: npm run check
       - name: Unit tests
         run: npm test
+      - name: Type check (real TS consumer)
+        run: npm run check:types
+
+  # TUI/node-pty 是跨平台关键路径：补一个 Windows job，防 Windows 专属回归
+  # （Codex 评审：此前 CI 只有 Ubuntu；node-pty 在 Windows 的 raw-mode/时序最易出问题）。
+  test-windows:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        node: [22]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - name: Syntax check
+        run: npm run check
+      - name: Unit tests
+        run: npm test
