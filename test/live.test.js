@@ -349,7 +349,7 @@ test("approval/requested 自动放行 respond 失败时保留 pending（Codex �
 	assert.equal(st.notice, "自动审批应答失败：network down（保留待你处理 y/n）", "应提示失败且可重试");
 });
 
-test("question/requested（auto 模式）：自动答应；interactive 挂起待 answerQuestion", async () => {
+test("question/requested（auto 与 interactive 均自动应答普通问询；保留 answerQuestion API）", async () => {
 	// auto 模式
 	const { conv, stream } = setup([], { approvalMode: "auto" });
 	await conv.open();
@@ -357,17 +357,22 @@ test("question/requested（auto 模式）：自动答应；interactive 挂起待
 	await tick();
 	assert.equal(conv.client.responds.length, 1, "auto 模式应自动应答一次");
 
-	// interactive 挂起
+	// 修正意图：默认交互也无完整提问 UI → 普通问询同样安全策略自动应答（选首个选项）
 	const { conv: conv2, stream: stream2 } = setup();
 	await conv2.open();
 	stream2.push({ type: "question/requested", sessionId: "s1", questions: [{ id: "q2", question: "方案？", options: [{ label: "A" }, { label: "B" }] }] });
 	await tick();
-	assert.equal(conv2.snapshot().pendingQuestions.length, 1, "interactive 挂起");
-	assert.equal(conv2.client.responds.length, 0, "未自动应答");
-	const pendingQ = conv2.snapshot().pendingQuestions[0];
-	await conv2.answerQuestion(pendingQ, [{ id: "q2", selected: ["A"] }]);
-	assert.equal(conv2.client.responds.length, 1, "answerQuestion 后应 respond");
-	assert.deepEqual(conv2.client.responds[0].result.value.answer.answers, [{ id: "q2", selected: ["A"] }]);
+	assert.equal(conv2.client.responds.length, 1, "interactive 模式普通问询也自动应答（不阻塞回合）");
+	assert.deepEqual(conv2.client.responds[0].result.value.answer.answers, [{ id: "q2", selected: ["A"] }], "默认选首个选项");
+
+	// 保留待未来交互式 UI 的 answerQuestion 路径仍可 respond（不回归 API 契约）
+	const { conv: conv3, stream: stream3 } = setup();
+	await conv3.open();
+	stream3.push({ type: "question/requested", sessionId: "s1", questions: [{ id: "q3", question: "再确认？", options: [{ label: "X" }, { label: "Y" }] }] });
+	await tick();
+	const pendingQ = conv3.snapshot().pendingQuestions[0];
+	await conv3.answerQuestion(pendingQ, [{ id: "q3", selected: ["X"] }]);
+	assert.equal(conv3.client.responds.length, 2, "answerQuestion 追加一次 respond");
 });
 
 test("cancelTurn：调用 session.cancel", async () => {
