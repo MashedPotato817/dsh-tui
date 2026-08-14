@@ -307,3 +307,10 @@ export function messageBudget(terminalRows: number, fixed?: object): number;
 export function sanitizeControlChars(text: string): string;
 export function hasControlChars(text: string | null): boolean;
 export function safeSingleLine(text: string, max?: number): string;
+
+// ---------- timing ----------
+export interface TimingAccumulator { scanned: number; buckets: { thinking: number; responding: number; tools: number }; active: { phase: string; start: number } | null }
+export function createTimingAccumulator(): TimingAccumulator;
+export function advanceTiming(acc: TimingAccumulator, events: Array<{ phase: string | null; at: number }>): { thinking: number; responding: number; tools: number };
+export function formatDurationMs(ms: number): string | null;
+export function timingSummary(buckets: { thinking?: number; responding?: number; tools?: number }): string;
