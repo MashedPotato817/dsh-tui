@@ -607,7 +607,11 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 			if (key.upArrow) { setMentionActive((a) => (a - 1 + curMentionCands.length) % curMentionCands.length); return; }
 			if (key.return) {
 				const sel = curMentionCands[((mentionActive % curMentionCands.length) + curMentionCands.length) % curMentionCands.length];
-				if (sel) setVim({ ...vim, lines: [`@${sel.file}`], cursor: { row: 0, col: `@${sel.file}`.length }, pending: "" });
+				if (sel) {
+					// 用整 token 替换语义插入（含空格自动 quoted：`@"path"`，对标 pi-tui）。
+					const ref = mentionRef(sel.file);
+					setVim({ ...vim, lines: [ref], cursor: { row: 0, col: ref.length }, pending: "" });
+				}
 				return;
 			}
 		}
@@ -770,7 +774,7 @@ import { createHistory, pushHistory, navigateHistory } from "../lib/history.js";
 import { diffLinesFrom, classifyDiffLines, diffStats, diffSummary, guardDiff } from "../lib/diff.js";
 import { deriveMode, modeLabel } from "../lib/ui-mode.js";
 import { projectDocsLabel } from "../lib/docs.js";
-import { detectIntent, buildMentionCandidates } from "../lib/mention.js";
+import { detectIntent, buildMentionCandidates, mentionRef } from "../lib/mention.js";
 import { toolSummary } from "../lib/tool-summary.js";
 import { parseMarkdown, inlineFragments } from "../lib/markdown.js";
 import { tailWithinBudget, messageBudget, displayWidth } from "../lib/viewport.js";

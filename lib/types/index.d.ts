@@ -277,8 +277,10 @@ export type IntentKind = "shell" | "mention" | "slash" | "text";
 export interface Intent { kind: IntentKind; rest: string; }
 export function detectIntent(text: string): Intent;
 export function parseLineRange(mention: string): { file: string | null; start: number | null; end: number | null } | null;
-export function buildMentionCandidates(mentionSoFar: string, files?: Array<string>, limit?: number): Array<{ file: string; score: number }>;
+export function buildMentionCandidates(mentionSoFar: string, files?: Array<string>, limit?: number): Array<{ file: string; score: number; isDir?: boolean }>;
 export function mentionDisplay(c: { file: string }): string;
+export function parseMentionQuery(mentionSoFar: string): { q: string; quoted: boolean };
+export function mentionRef(file: string): string;
 
 // ---------- tool-summary ----------
 export function toolSummary(tool: { name?: string; args?: string }, limit?: number): string;
