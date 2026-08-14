@@ -476,6 +476,9 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 				: null
 		),
 		showHelp ? h(HelpPanel, {}) : null,
+		snapshot.reconnecting
+			? h(Box, { borderStyle: "round", borderColor: "yellow" }, h(Text, { bold: true, color: "yellow" }, ` ⏳ 正在重连… ${snapshot.reconnecting.n}/${snapshot.reconnecting.max}`))
+			: null,
 		h(PendingApprovals, { approvals: snapshot.pendingApprovals }),
 		h(ToolCards, { tools: snapshot.tools }),
 		h(QueueDock, { queue: snapshot.queue }),

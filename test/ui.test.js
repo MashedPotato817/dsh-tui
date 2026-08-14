@@ -168,3 +168,18 @@ test("App 渲染：stuck pending 显示重发警告", () => {
 	);
 	assert.ok(output.includes("可能未生效"), "stuck pending 应显示重发警告");
 });
+
+test("App 渲染：mux 重连时显示 Reconnecting 横幅", () => {
+	const conv = fakeConv();
+	conv.state.reconnecting = { n: 2, max: 6 };
+	const output = renderToString(
+		React.createElement(App, {
+			conv,
+			session: { sessionId: "session-abcdef123456", agentPreset: "code", cwd: "C:\\work" },
+			onCommand: () => {},
+			onExit: () => {}
+		})
+	);
+	assert.ok(output.includes("正在重连"), "应渲染重连提示");
+	assert.ok(output.includes("2/6"), "应显示重连进度 n/max");
+});
