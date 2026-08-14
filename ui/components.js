@@ -209,8 +209,12 @@ export function ToolCards({ tools, limit = 5 }) {
 		} else {
 			badge = "✓"; color = "green";
 		}
-		// 工具迭代耗时（Claude Code 底部 "✻ Sautéed for 3s" / Codex ExecCell duration）
-		const durLabel = toolDurationLabel(t.startedAt, t.finishedAt ?? Date.now());
+		// 工具迭代耗时（Claude Code 底部 "✻ Sautéed for 3s" / Codex ExecCell duration）。
+		// 仅对已落定（done/error）的工具显示；running 工具没有确定结束时刻，
+		// 若用 Date.now() 会累计成误导性的巨值（如 (4m 2s)）。→ 修复：running 不显示时长。
+		const durLabel = t.status === "running"
+			? null
+			: toolDurationLabel(t.startedAt, t.finishedAt ?? undefined);
 		rows.push(
 			h(
 				Box,

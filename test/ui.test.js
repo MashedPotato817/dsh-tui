@@ -80,6 +80,27 @@ test("App 渲染：工具卡片显示名称 + 状态徽标 + diff 摘要", () =>
 	assert.ok(output.includes("+1/-1"), "应渲染 diff 摘要 +1/-1");
 });
 
+test("工具卡片：running 工具不显示误导性时长（不累计成 4m2s）", () => {
+	const conv = fakeConv();
+	// running 工具无 finishedAt，之前用 Date.now() 会累计成巨值。
+	const started = Date.now() - 242_000; // 4m 2s 前开始，仍未结束
+	conv.state.tools = [
+		{ seq: 1, callId: "a", name: "run_code", args: "x", status: "running", startedAt: started },
+		{ seq: 2, callId: "b", name: "write", args: "y", status: "done", startedAt: Date.now() - 3000, finishedAt: Date.now() - 1000 }
+	];
+	const output = renderToString(
+		React.createElement(App, {
+			conv,
+			session: { sessionId: "session-des", agentPreset: "code", cwd: "C:\\work" },
+			onCommand: () => {},
+			onExit: () => {}
+		})
+	);
+	// running 卡不应出现 (4m 2s) 这类巨额耗时；done 卡可显示短耗时
+	assert.ok(!/4m 2s/.test(output), "running 工具不应显示累计巨值时长");
+	assert.ok(/◐/.test(output), "running 工具保留 ◐ 状态");
+});
+
 test("App 渲染：队列 Dock 显示待处理消息", () => {
 	const conv = fakeConv();
 	conv.state.queue = [

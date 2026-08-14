@@ -25,6 +25,11 @@ npm install -g dsh-tui # 或局部：npm install dsh-tui
 
 需要本机已运行 `dsh web`（DeepSeek Harness host，默认 `http://127.0.0.1:3080`）。启动 host 后即可运行下面的用法。
 
+> **工作区建议（重要）**：请在**项目子目录**而非用户根目录启动（如 `cd C:\Users\zhntd\Desktop\my-project && dsh-tui`）。
+> DSH 沙箱有硬性规则：临时目录必须在工作区**之外**。若在 `C:\Users\zhntd` 这类用户根目录启动，
+> 系统临时目录 `...\AppData\Local\Temp` 会落在工作区内而被拒绝，导致部分工具（如写临时文件、
+> 浏览器临时文件）报错。切到项目子目录即可避开。
+
 ## 用法
 
 ```bash
@@ -73,7 +78,7 @@ dsh-tui --new | head
 lib/        core 层（零依赖）：client/fold/session/stream/live/vim/hud/policy/... 
 ui/         Ink 组件层
 bin/        cli 入口（interactive + run + list）
-test/       单元飞轮（143 例）
+test/       单元飞轮（144 例）
 test-live/  live 飞轮（真实 host，DSH_TEST_LIVE=1 才跑）
 ```
 
@@ -95,7 +100,7 @@ import { resolveVersion } from "dsh-tui/version";
 ## 开发
 
 ```bash
-npm test          # 单元飞轮（快，143 例）
+npm test          # 单元飞轮（快，144 例）
 npm run check:types # 真实 TS 消费者编译校验（零错误）
 npm run test:live # live 飞轮（真实 host，会调真实模型）
 npm run flywheel  # --watch 快速迭代
