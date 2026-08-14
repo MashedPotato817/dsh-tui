@@ -29,7 +29,7 @@
 
 ### Batch 2 —— 补全与命令（✅ 主项已交付 fdab239）
 - [x] `@` 文件补全升级：目录内查询下钻 + 子序列打分排序 + 回车整 token 替换 + 空格自动 `@"path"` quoted（`lib/mention.js`）。
-- [ ] 输入补全里区分 `/ @ ! :` 前缀（Claude Code 心智）—— 部分已有（/ 与 @ 分面板），`!`/`:` 待评估。
+- [x] 输入补全里区分 `/ @ ! :` 前缀（Claude Code 心智）—— `detectIntent` 分类 `!`shell/`/`命令/`@`文件，`:` 属 lib/vim 命令模态不归 chat；空态/输入提示列出 `/ 命令 · @ 文件引用 · ! shell`，单测 test/mention.test.js 锁定分类（78ce205）。
 - [x] 嵌套 fs 扫描支持真下钻 → `lib/scan.js` scanWorkspace（有界 BFS，注入 listDir 保持纯函数），App 启动时有界扫嵌套路径（maxEntries 4000/depth 5），@ 补全真正下钻。
 
 ### Batch 3 —— 架构健壮（中-高风险，宜稳扎稳打）
