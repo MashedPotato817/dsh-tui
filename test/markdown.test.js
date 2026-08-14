@@ -1,7 +1,7 @@
 // 单元飞轮：轻量 Markdown 结构解析（code block / 标题 / 列表 / diff / inline 粗体+code）。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseMarkdown, inlineFragments } from "../lib/markdown.js";
+import { parseMarkdown, inlineFragments, cachedParseMarkdown, clearMarkdownCache, markdownCacheSize } from "../lib/markdown.js";
 
 test("parseMarkdown：代码块提取 lang + content", () => {
 	const blocks = parseMarkdown("前文\n```js\nconst a = 1;\n```\n后文");
@@ -51,4 +51,17 @@ test("parseMarkdown：普通段落合并", () => {
 	const [p] = parseMarkdown("第一行\n第二行");
 	assert.equal(p.type, "text");
 	assert.equal(p.content, "第一行\n第二行");
+});
+
+test("cachedParseMarkdown：相同文本命中缓存（对象引用稳定）+ 有界", () => {
+	clearMarkdownCache();
+	const a = cachedParseMarkdown("## 标题\n正文");
+	const b = cachedParseMarkdown("## 标题\n正文");
+	assert.strictEqual(a, b, "相同文本应命中缓存，返回同一解析结果引用");
+	assert.equal(markdownCacheSize(), 1);
+	// 不同文本各自入缓存
+	cachedParseMarkdown("别的");
+	assert.equal(markdownCacheSize(), 2);
+	clearMarkdownCache();
+	assert.equal(markdownCacheSize(), 0);
 });

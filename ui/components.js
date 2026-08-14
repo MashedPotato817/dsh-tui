@@ -65,7 +65,8 @@ export function Banner({ hud }) {
 
 /** 助手正文轻量 Markdown 渲染：代码块/列表/标题/diff/内联粗体+code。 */
 function MarkdownBody({ text }) {
-	const blocks = parseMarkdown(text);
+	// 已定稿消息用有界缓存解析，避免每秒 `now` 重绘时重复 parse 长正文（pi-tui 行缓存思路）。
+	const blocks = cachedParseMarkdown(text);
 	const rows = [];
 	blocks.forEach((b, bi) => {
 		if (b.type === "code") {
@@ -794,7 +795,7 @@ import { deriveMode, modeLabel } from "../lib/ui-mode.js";
 import { projectDocsLabel } from "../lib/docs.js";
 import { detectIntent, buildMentionCandidates, mentionRef } from "../lib/mention.js";
 import { toolSummary } from "../lib/tool-summary.js";
-import { parseMarkdown, inlineFragments } from "../lib/markdown.js";
+import { cachedParseMarkdown, inlineFragments } from "../lib/markdown.js";
 import { tailWithinBudget, messageBudget, displayWidth } from "../lib/viewport.js";
 import { sanitizeControlChars } from "../lib/safety.js";
 import { scanWorkspace } from "../lib/scan.js";

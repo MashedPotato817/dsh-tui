@@ -295,6 +295,9 @@ export type MarkdownBlock =
 export function parseMarkdown(text: string): Array<MarkdownBlock>;
 export type InlineFragment = { kind: "text" | "bold" | "code"; content: string };
 export function inlineFragments(text: string): Array<InlineFragment>;
+export function cachedParseMarkdown(text: string): Array<MarkdownBlock>;
+export function clearMarkdownCache(): void;
+export function markdownCacheSize(): number;
 
 // ---------- viewport ----------
 export function displayWidth(text: string): number;
