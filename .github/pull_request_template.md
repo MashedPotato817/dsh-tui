@@ -16,6 +16,8 @@ assignees: []
 
 ## 验证
 
+- [ ] 已关联 `.collab/workstreams/<id>.md`，且未越过写入范围
+- [ ] `npm run check:governance` 通过
 - [ ] `npm run check` 通过
 - [ ] `npm test` 全绿（当前基线 `116` 单测）
 - [ ] 涉及真实 host 链路时 `npm run test:live` 通过
@@ -29,3 +31,9 @@ assignees: []
 ## 备注
 
 （其它需要 reviewer 注意的）
+
+## 风险、恢复与用户验证
+
+- Recovery point / revert 步骤：
+- [ ] 独立 Reviewer 已检查
+- [ ] 用户已亲自完成关键终端流程（未勾选时不得合并 main）

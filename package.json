@@ -56,6 +56,7 @@
     "test": "node --test test/fold.test.js test/session.test.js test/client.test.js test/stream.test.js test/live.test.js test/vim.test.js test/hud.test.js test/bridge.test.js test/ui.test.js test/registry.test.js test/policy.test.js test/permission.test.js test/command-loader.test.js test/config.test.js test/history.test.js test/diff.test.js test/ui-mode.test.js test/version.test.js test/docs.test.js test/types.test.js test/mention.test.js test/tool-summary.test.js test/markdown.test.js test/viewport.test.js test/safety.test.js test/timing.test.js test/scan.test.js",
     "test:live": "node scripts/run-live.mjs",
     "check:types": "tsc -p tsconfig.typecheck.json",
+    "check:governance": "node scripts/verify-governance.mjs",
     "tag": "node scripts/tag-version.mjs --push",
     "flywheel": "node scripts/flywheel.mjs test",
     "flywheel:live": "node scripts/flywheel.mjs test-live",

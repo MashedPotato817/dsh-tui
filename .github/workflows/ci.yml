@@ -25,6 +25,20 @@ jobs:
       - name: Type check (real TS consumer)
         run: npm run check:types
 
+  governance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: npm run check:governance
+      - name: Check whitespace
+        shell: bash
+        run: git diff --check HEAD^ HEAD
+
   # TUI/node-pty 是跨平台关键路径：补一个 Windows job，防 Windows 专属回归
   # （Codex 评审：此前 CI 只有 Ubuntu；node-pty 在 Windows 的 raw-mode/时序最易出问题）。
   test-windows:
