@@ -1,5 +1,9 @@
 # dsh-tui
 
+[![npm version](https://img.shields.io/npm/v/dsh-tui)](https://www.npmjs.com/package/dsh-tui)
+[![npm downloads](https://img.shields.io/npm/dm/dsh-tui)](https://www.npmjs.com/package/dsh-tui)
+[![License](https://img.shields.io/npm/l/dsh-tui)](https://github.com/MashedPotato817/dsh-tui)
+
 DeepSeek Harness 的终端客户端（TUI）。在 DeepSeek 生态内，以插件形式提供类似
 Claude Code 的 agent 对话 + 类似 Vim 的模态输入 —— 在两者之间找一个平衡。
 
@@ -12,11 +16,13 @@ Claude Code 的 agent 对话 + 类似 Vim 的模态输入 —— 在两者之间
 
 ## 安装
 
+已发布到 npm，一条命令全局安装：
+
 ```bash
-npm install -g dsh-tui
+npm install -g dsh-tui # 或局部：npm install dsh-tui
 ```
 
-需要本机已运行 `dsh web`（DeepSeek Harness host，默认 `http://127.0.0.1:3080`）。
+需要本机已运行 `dsh web`（DeepSeek Harness host，默认 `http://127.0.0.1:3080`）。启动 host 后即可运行下面的用法。
 
 ## 用法
 
