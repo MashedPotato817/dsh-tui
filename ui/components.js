@@ -781,7 +781,7 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 			snapshot.messages.length === 0 && !(snapshot.streaming && snapshot.streaming.text)
 				? h(Box, { key: "empty", flexDirection: "column", marginTop: 1 },
 						h(Text, { dim: true }, "开始对话 — 直接输入并按 Enter 发送。"),
-						h(Text, { dim: true, color: "gray" }, "/ 命令 · i/a/o 输入 · ESC 回 normal · Ctrl+C 中断/双按退出 · ? 帮助"))
+						h(Text, { dim: true, color: "gray" }, "/ 命令 · @ 文件引用 · ! shell 命令 · i/a/o 输入 · ESC 回 normal · Ctrl+C 中断/双按退出 · ? 帮助"))
 				: null
 		),
 		showHelp ? h(HelpPanel, {}) : null,
