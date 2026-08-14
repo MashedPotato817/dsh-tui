@@ -14,20 +14,23 @@
 
 ## 分批（按 价值/风险 排序，每批独立可交付）
 
-### Batch 0 —— 输入交互细节（用户点名，立竿见影，风险低）
-- [ ] 输入框非空时：第一次 ESC 回 normal（保留草稿），第二次 ESC 清空当前输入（Claude Code 心智）。
-- [ ] 上下方向键在输入可编辑时调用「最近发过的消息」历史（Claude Code 历史召回），normal 的 j/k 仍在行内移动。
-- [ ] 历史保留最近 N 条（已有 pushHistory/registry）并可持久化/回显。
-- 验证：lib/vim.js + history 纯函数单测；node-pty 烟测按 ↑ 出上一条。
+### Batch 0 —— 输入交互细节（✅ 已交付 commit 5463300）
+- [x] 输入框非空时：第一次 ESC 回 normal（保留草稿），第二次 ESC 清空当前输入。
+- [x] 上下方向键在输入可编辑时调用「最近发过的消息」历史（Claude Code 历史召回），normal 的 j/k 仍在行内移动。
+- 验证：lib/vim.js 单测 + node-pty 烟测。
 
-### Batch 1 —— 工程健壮（pi-tui 精读 + Claude Code 共识，低风险）
-- [ ] `displayText()` 控制字符转义（防模型输出注入 CSI/OSC 破坏布局）。
-- [ ] diff 编辑距离预算守卫（超预算回退整边渲染 + 标 approximate）。
-- [ ] 审批四态：allowed-once / allowed-session / rejected-and-continue / rejected-and-abort（对齐 Codex ReviewDecision）。
+### Batch 1 —— 工程健壮（✅ 安全项已交付 e6958e7；审批项已核实契约）
+- [x] `displayText()` 控制字符转义 → `lib/safety.js`（sanitizeControlChars），已接入 assistant/streaming。
+- [x] diff 编辑距离预算守卫 → `lib/diff.js` guardDiff（超预算折叠标 approx），已接入 ToolCards。
+- [≈] **审批取舍（已核实 host 契约，勿加新 outcome）**：DSH host `dsh-user-approval` 的 `OUTCOMES` 仅 `allowed-once / rejected / cancelled / unavailable`。没有 `allowed-session`，也没有 `rejected-and-continue/abort`。
+  - `allowed-session` 是**客户端本地语义**（dsh-tui 已正确实现：host 收 `allowed-once` + 本地 `sessionAllowedTools` 记住）。
+  - "拒绝并中止" host 不认 → 需走其它机制（如 session.cancel），不新增 outcome。
+  - **结论**：审批能落地的"态"就是一次 `allowed-once` / 拒绝 `rejected` / 会话记住（本地）+ 中止（cancel 侧路）；不新增四态 outcome，避免向 host 发非法值破坏 approval 流。
 
-### Batch 2 —— 补全与命令（中风险）
-- [ ] `@` 文件补全升级：实时 readdir 单目录 + 裸名有界索引 + 子序列打分排序 + 目录尾 `/` 下钻 + `@"path"` quoted。
-- [ ] 输入补全里区分 `/ @ ! :` 前缀（Claude Code 心智）。
+### Batch 2 —— 补全与命令（✅ 主项已交付 fdab239）
+- [x] `@` 文件补全升级：目录内查询下钻 + 子序列打分排序 + 回车整 token 替换 + 空格自动 `@"path"` quoted（`lib/mention.js`）。
+- [ ] 输入补全里区分 `/ @ ! :` 前缀（Claude Code 心智）—— 部分已有（/ 与 @ 分面板），`!`/`:` 待评估。
+- [ ] （可选）嵌套 fs 扫描支持真下钻：当前 cwdFiles 只扫顶层；若要做 BFS 索引需评估 fs 成本与 DSH host.listDirectory 能力。
 
 ### Batch 3 —— 架构健壮（中-高风险，宜稳扎稳打）
 - [ ] 显式全局 mode 状态机 + keybinding 表（对话/审批/命令/补全/历史 各态不打架）。
