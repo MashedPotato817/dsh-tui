@@ -56,6 +56,8 @@ dsh-tui --new | head
 | `ESC` | 回 normal 模式 |
 | `:` | 命令模态：`:w` 提交、`:cancel` 停止回合、`:q` 退出 |
 | `/` | 斜杠命令：`/new` `/resume` `/status` 或 host 命令（`/git status`） |
+| `!cmd` | 当作 shell 命令交给 agent 执行（OpenCode 式） |
+| `@file` | 引用文件、可带行范围 `@src/a.ts#10-20`（OpenCode 式） |
 | `Enter`（normal/insert） | 发送 |
 
 ### HUD 状态栏

@@ -243,3 +243,11 @@ export function projectDocsLabel(filenames?: Array<string>): string;
 
 // ---------- version ----------
 export function resolveVersion(pkgJson: object | null, fallback?: string): string;
+
+// ---------- mention ----------
+export type IntentKind = "shell" | "mention" | "slash" | "text";
+export interface Intent { kind: IntentKind; rest: string; }
+export function detectIntent(text: string): Intent;
+export function parseLineRange(mention: string): { file: string | null; start: number | null; end: number | null } | null;
+export function buildMentionCandidates(mentionSoFar: string, files?: Array<string>, limit?: number): Array<{ file: string; score: number }>;
+export function mentionDisplay(c: { file: string }): string;

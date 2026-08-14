@@ -251,6 +251,8 @@ export function HelpPanel() {
 		["Shift+Enter / Ctrl+J", "多行输入换行"],
 		[":", "命令模式（:w 提交 :cancel 停止 :q 退出）"],
 		["/", "斜杠命令"],
+		["!cmd", "当作 shell 命令交给 agent（OpenCode 式）"],
+		["@file", "引用文件（OpenCode 式，#10-20 行范围）"],
 		["Shift+Tab", "权限档位"],
 		["Ctrl+C", "中断（运行中）/ 双按退出"],
 		["Ctrl+L", "清屏"],
@@ -499,6 +501,16 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 			if (panel && panel.items.length > 0 && text.startsWith("/")) {
 				const item = panel.items[slashActive % panel.items.length];
 				if (item.name) onCommand(item.name);
+				return;
+			}
+			// OpenCode 式 `!cmd` shell 模式：明确标注为 shell 命令，交给 agent/host 执行。
+			if (text.trim().startsWith("!")) {
+				const cmd = text.trim().slice(1);
+				if (cmd) {
+					setHistory((h) => pushHistory(h, text));
+					conv.send(`运行 shell 命令：${cmd}`).catch(() => {});
+				}
+				setVim({ ...createVim(), mode: "insert" });
 				return;
 			}
 			if (text.trim()) {
