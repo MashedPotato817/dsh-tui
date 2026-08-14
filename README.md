@@ -76,6 +76,13 @@ test-live/  live 飞轮（真实 host，DSH_TEST_LIVE=1 才跑）
 ```
 
 `lib/index.js` 导出 core API，供 VSCode 集成等复用，不依赖任何 UI。
+**自带 TypeScript 类型声明**（`lib/types/*.d.ts` + `exports` 具名子路径，对齐官方 `@deepseek-ai/*` 插件规范）：
+
+```ts
+import { foldEvents, LiveConversation, hudState } from "dsh-tui"; // 全量类型
+import { countProjectDocs } from "dsh-tui/docs";                 // 子路径
+import { resolveVersion } from "dsh-tui/version";
+```
 
 ## 贡献与社区
 
