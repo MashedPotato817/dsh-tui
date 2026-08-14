@@ -28,7 +28,9 @@ async function initialSession(client, { sessionId, mode, preset, cwd }) {
 
 export async function startInteractive({ baseUrl, sessionId, preset, cwd, mode = "new" }) {
 	const client = new DshClient(baseUrl);
-	let session = await initialSession(client, { sessionId, mode, preset, cwd });
+	// 未显式给 cwd 时，用启动目录（Claude Code 心智：在工作目录启动即在其中工作）。
+	const resolvedCwd = cwd || process.cwd();
+	let session = await initialSession(client, { sessionId, mode, preset, cwd: resolvedCwd });
 	writeRecent(session.sessionId, { cwd: session.cwd, agentPreset: session.agentPreset });
 
 	// 应用 dsh-tui 配置（~/.dsh/dsh-tui.yml）：默认审批模式/权限档位/编辑工具白名单。

@@ -8,7 +8,7 @@
 import { createElement as h } from "react";
 import { useState, useEffect, useRef } from "react";
 import { Box, Text, useInput } from "ink";
-import { hudState, formatCost, contextWindowLabel, formatDuration, toolDurationLabel } from "../lib/hud.js";
+import { hudState, formatCost, contextWindowLabel, formatDuration, toolDurationLabel, formatTokens } from "../lib/hud.js";
 import { buildSlashPanel } from "../lib/slash.js";
 import { createVim, submitText } from "../lib/vim.js";
 import { processInput } from "../lib/bridge.js";
@@ -19,19 +19,26 @@ export function HUD({ hud, uiMode, docsLabel = "", agentCount = 0 }) {
 	const cost = formatCost(hud.costUsd);
 	const running = hud.running ? "●" : "○";
 	const tok =
-		`${(hud.usage.input || 0).toLocaleString()}i/${(hud.usage.output || 0).toLocaleString()}o`;
+		`${formatTokens(hud.usage.input)}i/${formatTokens(hud.usage.output)}o`;
 	const ctx = hud.contextPct !== null && hud.contextPct !== undefined
 		? ` | ctx ${hud.contextPct}%`
 		: "";
 	const modeStr = uiMode ? ` | ${uiMode}` : "";
+	// 未建模时不显示裸模型占位，只显示 mode；model 已知才显示（含上下文窗）。
+	const modelStr = hud.model ? hud.modelLabel : "";
 	// 子代理计数（Claude Code "← 1 agent"）。
 	const agents = agentCount > 0 ? ` | ${agentCount} agent${agentCount > 1 ? "s" : ""}` : "";
 	// cwd 截断成短路径（保留最后两段），避免整行溢出换行导致布局错位
 	const cwdShort = hud.cwd ? hud.cwd.split(/[\\/]/).slice(-2).join("/") : "";
-	const line =
-		` ${running} ${hud.modelLabel} | ${hud.mode}${hud.permBadge ? ` | ${hud.permBadge}` : ""}${modeStr}` +
-		`${docsLabel ? ` | ${docsLabel}` : ""}${agents}${cost ? ` | ${cost}` : ""} | ${tok}${ctx}` +
-		`${hud.turnElapsedLabel || ""}  ${hud.sessionId} ${cwdShort}`;
+	const parts = [` ${running}`];
+	if (modelStr) parts.push(` ${modelStr}`);
+	parts.push(` | ${hud.mode}${hud.permBadge ? ` | ${hud.permBadge}` : ""}${modeStr}`);
+	if (docsLabel) parts.push(` | ${docsLabel}`);
+	if (agents) parts.push(agents);
+	if (cost) parts.push(` | ${cost}`);
+	parts.push(` | ${tok}`);
+	if (ctx) parts.push(ctx);
+	const line = parts.join("") + `${hud.turnElapsedLabel || ""}  ${hud.sessionId} ${cwdShort}`;
 	return h(
 		Box,
 		{ borderStyle: "single", borderColor: "gray", paddingX: 1 },
@@ -39,18 +46,23 @@ export function HUD({ hud, uiMode, docsLabel = "", agentCount = 0 }) {
 	);
 }
 
-/** 启动 logo banner（Claude Code 顶栏心智）：版本 + HUD 概览，跟随消息上滚消失。 */
+/** 启动 logo banner（Claude Code 顶栏心智）：版本 + 概览，跟随消息上滚消失。 */
 export function Banner({ hud }) {
 	let pkgVersion = "";
 	try { pkgVersion = require("../package.json").version; } catch { /* 嵌入环境无版本 */ }
 	const cost = formatCost(hud.costUsd);
+	// 未建模前不输出占位 model（避免裸 `— · $0.0000`）；显示版本文案 + cwd。
+	const modelSeg = hud.model ? hud.modelLabel : "";
+	const bits = [pkgVersion ? `v${pkgVersion}` : ""];
+	if (modelSeg) bits.push(modelSeg);
+	if (cost) bits.push(cost);
+	if (hud.cwd) bits.push(hud.cwd);
+	const sub = bits.filter(Boolean).join(" · ");
 	return h(
 		Box,
 		{ flexDirection: "column", marginBottom: 1 },
 		h(Text, { bold: true, color: "magenta" }, `▐▛███▜▌  dsh-tui`),
-		h(Text, { dim: true, color: "gray" },
-			`${hud.modelLabel}${pkgVersion ? ` · v${pkgVersion}` : ""}${cost ? ` · ${cost}` : ""} · ${hud.cwd || ""}`
-		)
+		sub ? h(Text, { dim: true, color: "gray" }, sub) : null
 	);
 }
 
@@ -88,11 +100,11 @@ function MessageRow({ message, currentNow = null }) {
 			suffix ? h(Text, { dim: true, color: warn ? "red" : "yellow" }, suffix) : null
 		);
 	}
-	// assistant：host 回了但没生成文本时给明确占位，避免显示成空行/像没返回。
+	// assistant：正文前不加常驻前缀（Claude Code 风格）；流式草稿的 ◉ 由 ConversationList 单独渲染。
+	// host 回了但没生成文本时给明确占位，避免显示成空行/像没返回。
 	return h(
 		Box,
 		{},
-		h(Text, { bold: true, color: "magenta" }, "◉ "),
 		body ? h(Text, {}, body) : h(Text, { dim: true, color: "gray" }, "（已收到回复，但模型未生成文本内容）")
 	);
 }

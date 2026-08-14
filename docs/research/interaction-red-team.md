@@ -74,3 +74,39 @@
 - 不改 DSH host 契约（协议层是 host 的，dsh-tui 只消费）。
 - 每完成一批 bump minor + 发布 + push。
 - 本项目分支工作流：`feat/dsh-tui`，MAA commit。
+
+## 7. 成熟化实施计划（分批，逐步实施，自行检验后交付）
+
+以 **Claude Code 为主要参考**，分批把 dsh-tui 打磨到成熟。每批标准：
+core 纯函数 + 单测全绿 + node-pty 真实 TTY 烟测通过 → 才进入下一批。
+
+### 批次 A：启动体验 / 空态（0.3.x）
+- [x] cwd 缺省回落到 `process.cwd()`（修复启动 banner / HUD 显示空 cwd）。
+- [ ] model 空态不显示裸 `—`：未建模时 HUD/banner 用「connecting…」或隐藏 model 段。
+- [ ] banner 当 model 未知时不显示 `— · ...`，只显示版本文案；会话落定后再补 model 行。
+- [ ] 空会话提示文案更友好，并给出模型名（若已知）。
+
+### 批次 B：HUD 信息密度与布局（Claude Code 主要参考）
+- [ ] HUD 与输入框之间加分隔；HUD 用单行但按「左状态容 / 右会话」分片（如右对齐 session）。
+- [ ] model/成本区在未知时不输出无意义占位符（`$0.0000` 该隐藏）。
+- [ ] token 计数用更紧凑格式（`1.2k/3.0`），对齐 Claude Code。
+- [ ] cwd 只显示最后 1~2 段；sessionId 可隐藏或右对齐。
+
+### 批次 C：消息渲染
+- [ ] assistant 消息首段显示思考时间（`Thought for Xs`，若协议有 reasoning）。
+- [ ] user 消息与 assistant 消息用不同前缀/颜色区分更清晰。
+- [ ] 代码块 / diff 在消息内弱渲染（Claude Code 的语法高亮弱化版）。
+
+### 批次 D：输入框 / 命令（OpenCode/Codex 参考）
+- [ ] 输入框内联 `/` 命令补全已有；加 `@` 文件引用、`#` 行范围（OpenCode）。
+- [ ] normal 模式提示当前是 NORMAL（已有）；加 Vim 模式 keymap 提示可折叠。
+
+### 批次 E：工具栏 / 状态
+- [ ] 重连、运行中指示、queue dock 与子 agent 的视觉排序。
+- [ ] 底部除输入框外，加一行可选的命令提示（Claude Code `>` 提示）。
+
+### 检验方式
+- 单测：`npm test`（core 纯函数）。
+- 交互：`npm run smoke:interactive`（node-pty 真实 TTY）。
+- 布局判据（沿用已有约定）：HUD 在底部输入框上方、最新消息可视、长行截断不换行。
+

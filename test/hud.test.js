@@ -1,7 +1,7 @@
 // 单元飞轮：HUD 状态派生 —— token 汇总、成本计算、mode 映射。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sumUsage, priceFor, costUsd, hudState, formatCost, DEFAULT_PRICES, formatDuration, turnElapsedLabel, contextWindowLabel, toolDurationLabel } from "../lib/hud.js";
+import { sumUsage, priceFor, costUsd, hudState, formatCost, DEFAULT_PRICES, formatDuration, turnElapsedLabel, contextWindowLabel, toolDurationLabel, formatTokens } from "../lib/hud.js";
 
 test("sumUsage：消息 + 流式草稿的 token 汇总", () => {
 	const usage = sumUsage(
@@ -86,6 +86,15 @@ test("toolDurationLabel：工具迭代耗时", () => {
 	assert.equal(toolDurationLabel(1_000_000, null), null);
 });
 
+test("formatTokens：紧凑 token 计数（Claude Code 心智）", () => {
+	assert.equal(formatTokens(0), "0");
+	assert.equal(formatTokens(123), "123");
+	assert.equal(formatTokens(1200), "1.2k");
+	assert.equal(formatTokens(1000), "1k");
+	assert.equal(formatTokens(1500000), "1.5M");
+	assert.equal(formatTokens(2000000), "2M");
+});
+
 test("hudState：turnStartTime 存在时派生回合耗时标签", () => {
 	const view = { messages: [], streaming: null, running: true, model: "deepseek-chat", turnStartTime: 1_000_000 };
 	const hud = hudState({ view, session: { agentPreset: "code" }, now: 1_003_500 });
@@ -93,4 +102,16 @@ test("hudState：turnStartTime 存在时派生回合耗时标签", () => {
 	assert.equal(hud.modelLabel, "deepseek-chat");
 	// 无 now 时回退 Date.now()，turnStartTime=now → label 为空（仍在原点）
 	assert.equal(hudState({ view: { ...view, turnStartTime: Date.now() }, session: { agentPreset: "code" } }).turnElapsedLabel, "");
+});
+
+test("hudState：无用量时 costUsd=null（启动不显示裸 $0.0000）；model 未知为 null", () => {
+	const empty = hudState({ view: { messages: [], streaming: null, running: false, model: null }, session: { agentPreset: "code", cwd: "C:\\work" }, now: Date.now() });
+	assert.equal(empty.model, null);
+	assert.equal(empty.hasUsage, false);
+	assert.equal(empty.costUsd, null, "0 用量不显示成本");
+	assert.equal(empty.cwd, "C:\\work");
+
+	const withUsage = hudState({ view: { messages: [{ role: "assistant", usage: { inputTokens: 1, outputTokens: 1 } }], streaming: null, running: false, model: "deepseek-chat" }, session: { agentPreset: "code" } });
+	assert.equal(withUsage.hasUsage, true);
+	assert.ok(withUsage.costUsd !== null);
 });
