@@ -278,3 +278,6 @@ export function detectIntent(text: string): Intent;
 export function parseLineRange(mention: string): { file: string | null; start: number | null; end: number | null } | null;
 export function buildMentionCandidates(mentionSoFar: string, files?: Array<string>, limit?: number): Array<{ file: string; score: number }>;
 export function mentionDisplay(c: { file: string }): string;
+
+// ---------- tool-summary ----------
+export function toolSummary(tool: { name?: string; args?: string }, limit?: number): string;

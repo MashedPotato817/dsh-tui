@@ -215,13 +215,14 @@ export function ToolCards({ tools, limit = 5 }) {
 		const durLabel = t.status === "running"
 			? null
 			: toolDurationLabel(t.startedAt, t.finishedAt ?? undefined);
+		// 工具参数压缩成单行摘要（Claude Code 风格，不外露大段 JSON）。
+		const summary = toolSummary(t);
 		rows.push(
 			h(
 				Box,
 				{ key: t.callId, paddingX: 1 },
 				h(Text, { color, bold: true }, `${badge} `),
-				h(Text, { bold: true }, `${t.name}`),
-				t.args ? h(Text, { dim: true }, `  ${t.args}`) : null,
+				h(Text, { color: t.status === "done" ? "dim" : undefined, bold: t.status !== "done" }, `${summary}`),
 				durLabel ? h(Text, { dim: true, color: "gray" }, `  ${durLabel}`) : null
 			)
 		);
@@ -616,5 +617,6 @@ import { diffLinesFrom, classifyDiffLines, diffStats, diffSummary } from "../lib
 import { deriveMode, modeLabel } from "../lib/ui-mode.js";
 import { projectDocsLabel } from "../lib/docs.js";
 import { detectIntent, buildMentionCandidates } from "../lib/mention.js";
+import { toolSummary } from "../lib/tool-summary.js";
 
 const require = createRequire(import.meta.url);
