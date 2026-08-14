@@ -7,7 +7,7 @@
  */
 import { createElement as h } from "react";
 import { useState, useEffect, useRef } from "react";
-import { Box, Text, useInput, Static } from "ink";
+import { Box, Text, useInput } from "ink";
 import { hudState, formatCost } from "../lib/hud.js";
 import { buildSlashPanel } from "../lib/slash.js";
 import { createVim, submitText } from "../lib/vim.js";
@@ -67,22 +67,18 @@ function MessageRow({ message }) {
 }
 
 export function ConversationList({ messages, streaming }) {
-	// live 尾（pending 乐观行 / 注入上下文 / 流式草稿）用常规重绘区。
-	const live = messages.filter((m) => m.pending || m.injected);
-	const rows = live.map((m, i) => h(MessageRow, { key: i, message: m }));
+	// 渲染全部消息（落定 + pending + 注入），普通 Box 一次渲染，可靠可见。
+	const rows = messages.map((m, i) => h(MessageRow, { key: m.seq ?? i, message: m }));
 	if (streaming && streaming.text) {
 		rows.push(h(Box, { key: "stream" }, h(Text, { dim: true, color: "magenta" }, "◉ "), h(Text, { dim: true }, String(streaming.text))));
 	}
 	return h(Box, { flexDirection: "column" }, ...rows);
 }
 
-/** 落定历史的 <Static> 区：每行稳定 key=seq，新增才渲染。 */
+/** 落定历史（保留导出兼容；现由 ConversationList 统一渲染，此组件作为 alias 用普通渲染）。 */
 export function SettledList({ messages }) {
 	const settled = messages.filter((m) => typeof m.seq === "number" && m.seq >= 0 && !m.injected);
-	return h(Static, {
-		items: settled,
-		children: (m) => h(MessageRow, { key: m.seq, message: m })
-	});
+	return h(Box, { flexDirection: "column" }, settled.map((m) => h(MessageRow, { key: m.seq, message: m })));
 }
 
 export function SlashPanel({ panel }) {
@@ -269,7 +265,8 @@ export function SubagentDock({ subagents }) {
  */
 export default function App({ conv, session, onCommand, onExit, getSession }) {
 	const [snapshot, setSnapshot] = useState(() => conv.snapshot());
-	const [vim, setVim] = useState(() => createVim());
+	// 默认进入 insert 模态 → 打开即能直接打字（对标 Claude Code/Codex）；ESC 回 vim normal。
+	const [vim, setVim] = useState(() => ({ ...createVim(), mode: "insert", insertFirst: true }));
 	const [slashActive, setSlashActive] = useState(0);
 	// 让 HUD 跟随会话切换
 	const [liveSession, setLiveSession] = useState(() => (getSession ? getSession() : session));
@@ -447,12 +444,11 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		Box,
 		{ flexDirection: "column", height: "100%" },
 		h(HUD, { hud, uiMode }),
-		// 落定历史用 <Static>（永不重绘）；live 尾（pending/注入/流式草稿）用常规重绘区。
-		h(SettledList, { messages: snapshot.messages }),
+		// 消息区：全部消息 + 流式草稿（普通渲染，一次可见，不用 <Static> 以避免漏显）。
 		h(Box, { flexDirection: "column", flexGrow: 1, minHeight: 2 },
 			ConversationList({ messages: snapshot.messages, streaming: snapshot.streaming }),
 			snapshot.messages.length === 0 && !(snapshot.streaming && snapshot.streaming.text)
-				? h(Text, { key: "empty", dim: true }, "( 空会话 — 按 i 输入，Enter 发送，/ 命令 )")
+				? h(Text, { key: "empty", dim: true }, "( 空会话 — 直接输入，Enter 发送，/ 命令 )")
 				: null
 		),
 		showHelp ? h(HelpPanel, {}) : null,
