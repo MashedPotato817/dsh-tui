@@ -294,6 +294,8 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		conv.open().catch((error) => {
 			setSnapshot((s) => ({ ...s, notice: `连接失败：${error.message}` }));
 		});
+		// 启动 history 轮询兜底：mux 断帧时回复仍能从 history 到达。
+		if (typeof conv.startHistorySync === "function") conv.startHistorySync();
 		return () => conv.close();
 	}, [conv]);
 
