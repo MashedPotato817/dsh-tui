@@ -91,6 +91,33 @@ async function run() {
 			fail("输入区标记（insert）不可见：输入区可能被历史顶出屏幕");
 		}
 
+		// 6b. 对标累积交互：两下 ESC 清空 + ↑ 历史召回 + /status session 详情
+		// a) 输入些文字 → ESC×2 → 输入框应清空
+		pty.write("\r"); await sleep(200);
+		pty.write("DELETE_ME"); await sleep(300);
+		if (!buffer.includes("DELETE_ME")) fail("测试输入未进入输入框");
+		pty.write("\x1b"); await sleep(250); pty.write("\x1b"); await sleep(350); // 两下 ESC
+		// 之后输入框应空：再输入一个唯一词，若前一个仍残留则失败
+		pty.write("AFTER_CLEAR"); await sleep(300);
+		if (buffer.includes("AFTER_CLEAR")) console.log("double-ESC: 输入区可重新输入 OK");
+		else fail("double-ESC 清空后无法输入");
+		pty.write("\x1b\x1b"); await sleep(300); // 清掉 AFTER_CLEAR
+
+		// b) ↑ 召回最近发过的 marker（insert 单行时上键）
+		pty.write("\x1b[A"); // ↑ 在 insert 应召回上一条消息
+		await sleep(400);
+		if (buffer.includes(MARKER)) console.log("history: ↑ 召回最近消息 OK (MARKER 出现在输入)");
+		else fail("↑ 历史召回后 MARKER 未出现在输入");
+		pty.write("\x1b\x1b"); await sleep(300); // 清空召回
+
+		// c) /status 展示 session 详情（含 session 前缀）
+		pty.write("\r"); await sleep(200);
+		pty.write("/status"); await sleep(250); pty.write("\r"); await sleep(500);
+		if (buffer.includes("session ") || buffer.includes("session-")) console.log("/status: 显示 session 详情 OK");
+		else fail("/status 未显示 session 信息");
+		// 清掉 /status 残留（回 insert）
+		pty.write("\x1b\x1b"); await sleep(300);
+
 		// 7. 应用级 follow-tail：PageUp 上翻 → 应出现「回到底部」提示且不跳顶；End 回到底部。
 		// 用轮询而非固定 sleep，避免渲染调度抖动导致误判（相位计时 etc 使内容更密集）。
 		pty.write("\x1b[5~"); // PageUp

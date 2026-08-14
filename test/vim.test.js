@@ -232,11 +232,11 @@ test("Claude Code 心智：ESC 回 normal（保留草稿），再按一次 ESC �
 	const esc1 = vimKey(state, "escape");
 	assert.equal(esc1.state.mode, MODES.NORMAL);
 	assert.equal(submitText(esc1.state), "hi!", "第一次 ESC 不清空草稿");
-	// 第二次 ESC（normal 且非空）→ 清空
+	// 第二次 ESC（normal 且非空）→ 清空并回到 insert（可直接接着打字）
 	const esc2 = vimKey(esc1.state, "escape");
-	assert.equal(esc2.state.mode, MODES.NORMAL);
+	assert.equal(esc2.state.mode, MODES.INSERT, "清空后应回 insert 便于继续输入");
 	assert.equal(submitText(esc2.state), "", "第二次 ESC 应清空整个输入");
-	// 第三次（现在空了）→ 不再清，保持空
-	const esc3 = vimKey(esc2.state, "escape");
-	assert.equal(submitText(esc3.state), "");
+	// 清空后可直接继续打字（insert）
+	const typed = vimKey(esc2.state, "x");
+	assert.equal(submitText(typed.state), "x", "清空后 insert 可立即输入");
 });
