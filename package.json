@@ -1,6 +1,6 @@
 {
   "name": "dsh-tui",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Terminal client for DeepSeek Harness: a TUI over the DSH client contract (ctx.remote)",
   "type": "module",
   "main": "lib/index.js",
