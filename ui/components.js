@@ -127,8 +127,7 @@ export function SettledList({ messages }) {
 	return h(Box, { flexDirection: "column" }, settled.map((m) => h(MessageRow, { key: m.seq, message: m })));
 }
 
-export function SlashPanel({ panel }) {
-	if (!panel || panel.items.length === 0) return null;
+export function SlashPanel({ panel }) {	if (!panel || panel.items.length === 0) return null;
 	const items = panel.items.map((item, i) => {
 		const active = i === panel.active;
 		return h(
@@ -148,6 +147,20 @@ export function SlashPanel({ panel }) {
 export function Notice({ notice }) {
 	if (!notice) return null;
 	return h(Box, { borderStyle: "round", borderColor: "yellow", paddingX: 1 }, h(Text, {}, String(notice)));
+}
+
+/** @引用文件补全面板（OpenCode 心智）：展示当前 `@xxx` 的候选文件，Tab/方向键选择。 */
+export function MentionPanel({ candidates, active = 0 }) {
+	if (!candidates || candidates.length === 0) return null;
+	const items = candidates.map((c, i) => {
+		const sel = i === active;
+		return h(
+			Box,
+			{ key: c.file, paddingX: 1 },
+			h(Text, { backgroundColor: sel ? "#4c8dff" : undefined, color: sel ? "black" : undefined, bold: sel }, `@${c.file}`)
+		);
+	});
+	return h(Box, { borderStyle: "round", borderColor: "cyan", flexDirection: "column", marginTop: 1 }, ...items);
 }
 
 export function CommandInput({ vim }) {
@@ -334,6 +347,10 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 	const [history, setHistory] = useState(() => createHistory());
 	// 项目内置文档计数标签（Claude Code "1 CLAUDE.md"）
 	const [docsLabel, setDocsLabel] = useState("");
+	// cwd 文件列表（供 @ 引用补全；OpenCode 心智）
+	const [cwdFiles, setCwdFiles] = useState([]);
+	// @ 引用候选当前选中下标
+	const [mentionActive, setMentionActive] = useState(0);
 	// 每秒刷新时钟（pending 超时提示用）
 	const [now, setNow] = useState(() => Date.now());
 
@@ -342,16 +359,19 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		return () => clearInterval(t);
 	}, []);
 
-	// 项目文档计数：仅在 cwd 变化时读一次目录。
+	// 项目文档计数 + 文件列表（供 @ 引用补全）：仅在 cwd 变化时读一次目录。
 	useEffect(() => {
 		const cwd = (liveSession && liveSession.cwd) || "";
-		if (!cwd) { setDocsLabel(""); return; }
+		if (!cwd) { setDocsLabel(""); setCwdFiles([]); return; }
 		let cancelled = false;
 		try {
 			const { readdirSync } = require("node:fs");
 			const names = readdirSync(cwd, { encoding: "utf8" });
-			if (!cancelled) setDocsLabel(projectDocsLabel(names));
-		} catch { if (!cancelled) setDocsLabel(""); }
+			if (!cancelled) {
+				setDocsLabel(projectDocsLabel(names));
+				setCwdFiles(names.filter((n) => !n.startsWith(".")));
+			}
+		} catch { if (!cancelled) { setDocsLabel(""); setCwdFiles([]); } }
 		return () => { cancelled = true; };
 	}, [liveSession && liveSession.cwd]);
 
@@ -473,6 +493,19 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		}
 
 		const currentText = submitText(vim);
+		// @ 文件引用补全面板导航（OpenCode 心智）：Tab/方向键循环，Enter 把选中文件插入输入。
+		const curMention = detectIntent(currentText);
+		const curMentionCands = curMention.kind === "mention" ? buildMentionCandidates(curMention.rest, cwdFiles, 8) : [];
+		if (curMentionCands.length > 0) {
+			if (key.tab && !key.shift) { setMentionActive((a) => (a + 1) % curMentionCands.length); return; }
+			if (key.downArrow) { setMentionActive((a) => (a + 1) % curMentionCands.length); return; }
+			if (key.upArrow) { setMentionActive((a) => (a - 1 + curMentionCands.length) % curMentionCands.length); return; }
+			if (key.return) {
+				const sel = curMentionCands[((mentionActive % curMentionCands.length) + curMentionCands.length) % curMentionCands.length];
+				if (sel) setVim({ ...vim, lines: [`@${sel.file}`], cursor: { row: 0, col: `@${sel.file}`.length }, pending: "" });
+				return;
+			}
+		}
 		// slash 命令面板导航：输入以 / 开头且命中命令时，Tab/方向键循环选择，
 		// Enter/Tab 选中执行（Claude Code 式可发现性补全）。
 		const activePanel = buildSlashPanel(currentText, allCommandsFn(customCommands), { active: slashActive });
@@ -533,6 +566,11 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 
 	const text = submitText(vim);
 	const slashPanel = buildSlashPanel(text, allCommandsFn(customCommands), { active: slashActive });
+	// @ 文件引用补全（OpenCode 心智）：输入以 @ 开头时按当前输入过滤 cwd 文件。
+	const mentionIntent = detectIntent(text);
+	const mentionCandidates = mentionIntent.kind === "mention"
+		? buildMentionCandidates(mentionIntent.rest, cwdFiles, 8)
+		: [];
 	const uiMode = modeLabel(deriveMode(snapshot, { showHelp }));
 
 	return h(
@@ -556,6 +594,7 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		h(ToolCards, { tools: snapshot.tools }),
 		h(QueueDock, { queue: snapshot.queue }),
 		h(SubagentDock, { subagents: snapshot.subagents }),
+		mentionCandidates.length > 0 ? h(MentionPanel, { candidates: mentionCandidates, active: mentionActive }) : null,
 		h(SlashPanel, { panel: slashPanel }),
 		h(Notice, { notice: snapshot.notice }),
 		// HUD 放在输入框上方（贴近底部）——用户从最底部输入，HUD 常驻可见
@@ -572,5 +611,6 @@ import { createHistory, pushHistory, navigateHistory } from "../lib/history.js";
 import { diffLinesFrom, classifyDiffLines, diffStats, diffSummary } from "../lib/diff.js";
 import { deriveMode, modeLabel } from "../lib/ui-mode.js";
 import { projectDocsLabel } from "../lib/docs.js";
+import { detectIntent, buildMentionCandidates } from "../lib/mention.js";
 
 const require = createRequire(import.meta.url);
