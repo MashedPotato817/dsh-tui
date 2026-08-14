@@ -7,3 +7,5 @@ node_modules/
 # TTY/smoke 运行时产生的临时文件
 terminal-ui-essentials.md
 _writetest.txt
+
+python_six_points.md
