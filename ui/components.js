@@ -24,14 +24,15 @@ export function HUD({ hud, uiMode }) {
 		? ` | ctx ${hud.contextPct}%`
 		: "";
 	const modeStr = uiMode ? ` | ${uiMode}` : "";
+	// cwd 截断成短路径（保留最后两段），避免整行溢出换行导致布局错位
+	const cwdShort = hud.cwd ? hud.cwd.split(/[\\/]/).slice(-2).join("/") : "";
+	const line =
+		` ${running} ${hud.model} | ${hud.mode}${hud.permBadge ? ` | ${hud.permBadge}` : ""}${modeStr}` +
+		`${cost ? ` | ${cost}` : ""} | ${tok}t${ctx}  ${hud.sessionId} ${cwdShort}`;
 	return h(
 		Box,
 		{ borderStyle: "single", borderColor: "gray", paddingX: 1 },
-		h(Text, { color: "cyan", bold: true }, ` ${running} ${hud.model} | ${hud.mode}`),
-		h(Text, { color: hud.permColor || "gray", bold: true }, ` ${hud.permBadge || "⏸ manual"} `),
-		h(Text, { color: "magenta", bold: uiMode === "APPROVE" }, `${modeStr}`),
-		h(Text, { color: "dim" }, `${cost ? ` | ${cost}` : ""} | ${tok}t${ctx}`),
-		h(Box, { marginLeft: 1 }, h(Text, { color: "dim" }, ` ${hud.sessionId} ${hud.cwd || ""}`))
+		h(Text, { wrap: "truncate" }, line)
 	);
 }
 
@@ -79,9 +80,11 @@ function MessageRow({ message, currentNow = null }) {
 }
 
 export function ConversationList({ messages, streaming, now }) {
-	// 渲染全部消息（落定 + pending + 注入），普通 Box 一次渲染，可靠可见。
-	// key：有真实 seq 用 seq，否则用索引（pending 行 seq=-1 不可作 key，避免 -1 冲突）。
-	const rows = messages.map((m, i) => h(MessageRow, { key: typeof m.seq === "number" && m.seq >= 0 ? m.seq : `idx-${i}`, message: m, currentNow: now }));
+	// 正序渲染。为防"最新消息被 Ink 顶出屏幕"，只渲染最近 N 条做窗口，
+	// 配合 flexGrow 让 INPUT 常驻底部；窗口保证最新回复始终在可视尾。
+	const WINDOW = 60;
+	const visible = messages.length > WINDOW ? messages.slice(-WINDOW) : messages;
+	const rows = visible.map((m, i) => h(MessageRow, { key: typeof m.seq === "number" && m.seq >= 0 ? m.seq : `idx-${i}`, message: m, currentNow: now }));
 	if (streaming && streaming.text) {
 		rows.push(h(Box, { key: "stream" }, h(Text, { dim: true, color: "magenta" }, "◉ "), h(Text, { dim: true }, String(streaming.text))));
 	}
@@ -466,8 +469,7 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 
 	return h(
 		Box,
-		{ flexDirection: "column", height: "100%" },
-		h(HUD, { hud, uiMode }),
+		{ flexDirection: "column", flexGrow: 1 },
 		// 消息区：全部消息 + 流式草稿（普通渲染，一次可见，不用 <Static> 以避免漏显）。
 		h(Box, { flexDirection: "column", flexGrow: 1, minHeight: 2 },
 			ConversationList({ messages: snapshot.messages, streaming: snapshot.streaming, now }),
@@ -485,6 +487,8 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		h(SubagentDock, { subagents: snapshot.subagents }),
 		h(SlashPanel, { panel: slashPanel }),
 		h(Notice, { notice: snapshot.notice }),
+		// HUD 放在输入框上方（贴近底部）——用户从最底部输入，HUD 常驻可见
+		h(HUD, { hud, uiMode }),
 		h(CommandInput, { vim })
 	);
 }
