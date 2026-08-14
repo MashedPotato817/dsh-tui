@@ -188,8 +188,7 @@ export function ToolCards({ tools, limit = 5 }) {
 	if (!tools || tools.length === 0) return null;
 	const recent = tools.slice(-limit);
 	const rows = [];
-	recent.forEach((t) => {
-		let badge, color;
+	recent.forEach((t) => {		let badge, color;
 		if (t.status === "running") {
 			badge = "◐"; color = "cyan";
 		} else if (t.status === "error") {
@@ -228,7 +227,7 @@ export function ToolCards({ tools, limit = 5 }) {
 	});
 	return h(
 		Box,
-		{ flexDirection: "column" },
+		{ flexDirection: "column", maxHeight: 10 },
 		...rows
 	);
 }
@@ -285,7 +284,7 @@ export function QueueDock({ queue }) {	if (!queue || queue.length === 0) return 
 	});
 	return h(
 		Box,
-		{ borderStyle: "round", borderColor: "cyan", flexDirection: "column" },
+		{ borderStyle: "round", borderColor: "cyan", flexDirection: "column", maxHeight: 8 },
 		h(Text, { bold: true, color: "cyan" }, " 待处理队列"),
 		...rows
 	);
@@ -304,7 +303,7 @@ export function SubagentDock({ subagents }) {
 	);
 	return h(
 		Box,
-		{ borderStyle: "round", borderColor: "magenta", flexDirection: "column" },
+		{ borderStyle: "round", borderColor: "magenta", flexDirection: "column", maxHeight: 8 },
 		h(Text, { bold: true, color: "magenta" }, " 子代理"),
 		...rows
 	);
