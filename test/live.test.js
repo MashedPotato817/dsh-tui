@@ -273,6 +273,21 @@ test("approval/requested：acceptEdits 档自动放行编辑工具不挂起", as
 	assert.equal(conv.snapshot().pendingApprovals.length, 1, "非编辑工具在 acceptEdits 档挂起待交互");
 });
 
+test("approval/requested 自动放行 respond 失败时保留 pending（Codex 评审 #6，不吞错）", async () => {
+	const { conv, stream } = setup();
+	await conv.open();
+	// 让 respond 失败（模拟网络/host 瞬断）
+	conv.client.respond = async () => { throw new Error("network down"); };
+	conv.permissionOptions.editableTools = ["write"];
+	conv.setPermissionMode("acceptEdits");
+	stream.push({ type: "approval/requested", sessionId: "s1", approvalId: "ap-f", toolName: "write", rpcId: "rpc-ap-f" });
+	await tick();
+	await tick(); // 等 #autoAllow 的 await respond 落定
+	const st = conv.snapshot();
+	assert.equal(st.pendingApprovals.length, 1, "respond 失败后 pending 应保留，不静默删除");
+	assert.equal(st.notice, "自动审批应答失败：network down（保留待你处理 y/n）", "应提示失败且可重试");
+});
+
 test("question/requested（auto 模式）：自动答应；interactive 挂起待 answerQuestion", async () => {
 	// auto 模式
 	const { conv, stream } = setup([], { approvalMode: "auto" });
