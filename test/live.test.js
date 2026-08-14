@@ -177,6 +177,19 @@ test("流式：usage 不触发正文重绘（不发正文批）", async () => {
 	assert.equal(before, 0, "usage 单独到达不应触发正文 emit");
 });
 
+test("流式：超过 streamingMaxChars 立即 flush，不积压成超大单批", async () => {
+	const { conv, stream } = setup();
+	await conv.open();
+	conv.streamingMaxChars = 20; // 设小，方便测
+	conv.streamingPublishMs = 100000; // 拉长定时器，确保是「max 触发」而非「定时触发」
+	stream.push({ type: "session/event", sessionId: "s1", event: mkEvent("turn/start", { turn: 1 }, 1) });
+	stream.push({ type: "session/event", sessionId: "s1", event: mkEvent("assistant/chunk", { turn: 1, step: 0, chunk: { type: "block-start", index: 0, blockType: "text" } }, 2) });
+	const text = "a".repeat(25); // 25 > cap 20
+	stream.push({ type: "session/event", sessionId: "s1", event: mkEvent("assistant/chunk", { turn: 1, step: 0, chunk: { type: "text-delta", index: 0, text } }, 3) });
+	await tick();
+	assert.equal(conv.snapshot().streaming?.text, text, "超 max 应立刻发布，不等定时器");
+});
+
 test("send：乐观回显 pending 行，真实 user/message 到达后替换（不重复）", async () => {
 	const { conv, stream } = setup();
 	await conv.open();
