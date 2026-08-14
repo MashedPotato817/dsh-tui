@@ -97,6 +97,7 @@ import { resolveVersion } from "dsh-tui/version";
 - 了解项目的 **协同机制与反馈升级飞轮**：见 [`docs/community.md`](docs/community.md) —— 从上报到修复、测试、发布的完整闭环。
 - 社区路线图：见 [dsh-ecosystem](https://github.com/MashedPotato817/dsh-ecosystem)。
 - 维护者发布流程（验收→合 main→bump→publish）：见 [`docs/release-runbook.md`](docs/release-runbook.md)。
+- 发布前真实终端验收清单：见 [`docs/ACCEPTANCE.md`](docs/ACCEPTANCE.md)。
 
 ## 开发
 
