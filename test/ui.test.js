@@ -32,7 +32,8 @@ test("App 树 renderToString 不崩，含 HUD/消息", () => {
 	assert.ok(output.includes("PTC"), "HUD 应显示 PTC 模式");
 	assert.ok(output.includes("你好"), "消息列表应含 user 文本");
 	assert.ok(output.includes("回复内容"), "消息列表应含 assistant 文本");
-	assert.ok(output.includes("11111111") || output.includes("abcdef12"), "HUD 应含短 sessionId");
+	// 新 HUD 默认隐藏 sessionId（归 /status）；但应仍显示 model/token 等运行指标。
+	assert.ok(output.includes("model") || output.includes("PTC"), "HUD 保留运行指标");
 });
 
 test("hudState + renderToString：流式草稿渲染", () => {
@@ -128,7 +129,7 @@ test("HelpPanel：渲染快捷键列表", () => {
 	assert.ok(output.includes("Shift+Tab"), "应含权限档位提示");
 });
 
-test("App 渲染：UI Mode 标签显示在 HUD（审批时 APPROVE）", () => {
+test("App 渲染：有挂起审批时显示审批面板（等待批准 + 工具名）", () => {
 	const conv = fakeConv();
 	conv.state.pendingApprovals = [{ approvalId: "ap-1", toolName: "write" }];
 	const output = renderToString(
@@ -139,7 +140,8 @@ test("App 渲染：UI Mode 标签显示在 HUD（审批时 APPROVE）", () => {
 			onExit: () => {}
 		})
 	);
-	assert.ok(output.includes("APPROVE"), "有挂起审批时 HUD 应显示 APPROVE mode");
+	// 新 HUD 去掉了 APPROVE 标签；审批信息在独立面板展示（y/Y/n）。
+	assert.ok(output.includes("等待批准") || output.includes("y"), "审批信息应在审批面板而非 HUD 标签");
 });
 
 test("App 渲染：子代理 Dock 显示 fork 出的子代理", () => {

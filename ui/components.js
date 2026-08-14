@@ -14,35 +14,32 @@ import { createVim, submitText } from "../lib/vim.js";
 import { processInput } from "../lib/bridge.js";
 import { nextMode, modeBadge, modeColor } from "../lib/permission.js";
 
-/** HUD 一行：`● model[1M] | PTC | ⏸ manual | $0.12 | 1.2ki/3o | ctx 4% | ⏱3s  session cwd` */
-export function HUD({ hud, uiMode, docsLabel = "", agentCount = 0 }) {
+/** HUD —— 无框、低对比、单行，`model[1M] · PTC`(左) + `tok · cost · ctx`(右)。
+ *  运行指标只保留 essentials；docs/agents/session/cwd/CHAT/manual 都隐藏（前两者 0 时不显示，
+ *  cwd/CHAT 在 Banner 与输入区已展示，session 归 /status，permission 已在输入区右侧）。 */
+export function HUD({ hud }) {
 	const cost = formatCost(hud.costUsd);
 	const running = hud.running ? "●" : "○";
-	const tok =
-		`${formatTokens(hud.usage.input)}i/${formatTokens(hud.usage.output)}o`;
-	const ctx = hud.contextPct !== null && hud.contextPct !== undefined
-		? ` | ctx ${hud.contextPct}%`
-		: "";
-	const modeStr = uiMode ? ` | ${uiMode}` : "";
-	// 未建模时不显示裸模型占位，只显示 mode；model 已知才显示（含上下文窗）。
-	const modelStr = hud.model ? hud.modelLabel : "";
-	// 子代理计数（Claude Code "← 1 agent"）。
-	const agents = agentCount > 0 ? ` | ${agentCount} agent${agentCount > 1 ? "s" : ""}` : "";
-	// cwd 截断成短路径（保留最后两段），避免整行溢出换行导致布局错位
-	const cwdShort = hud.cwd ? hud.cwd.split(/[\\/]/).slice(-2).join("/") : "";
-	const parts = [` ${running}`];
-	if (modelStr) parts.push(` ${modelStr}`);
-	parts.push(` | ${hud.mode}${hud.permBadge ? ` | ${hud.permBadge}` : ""}${modeStr}`);
-	if (docsLabel) parts.push(` | ${docsLabel}`);
-	if (agents) parts.push(agents);
-	if (cost) parts.push(` | ${cost}`);
-	parts.push(` | ${tok}`);
-	if (ctx) parts.push(ctx);
-	const line = parts.join("") + `${hud.turnElapsedLabel || ""}  ${hud.sessionId} ${cwdShort}`;
+	const tok = `${formatTokens(hud.usage.input)}i/${formatTokens(hud.usage.output)}o`;
+	// ctx 0% 或未知时不显示
+	const ctx = hud.contextPct > 0 ? `· ctx ${hud.contextPct}%` : "";
+	// 无用量/价格未知时不显示 cost
+	const costSeg = cost && hud.hasUsage ? `· ${cost}` : "";
+	const runningDot = h(Text, { color: hud.running ? "cyan" : "dim" }, `${running} `);
+	const left = [
+		runningDot,
+		h(Text, { color: "gray" }, hud.model ? `${hud.modelLabel} · ` : ""),
+		h(Text, {}, `${hud.mode}`)
+	];
+	// 右侧运行指标（去重后）：tok · cost · ctx
+	const rightBits = [tok, costSeg, ctx].filter(Boolean).join(" ");
+	const right = rightBits ? h(Text, { dim: true, color: "gray" }, rightBits) : null;
 	return h(
 		Box,
-		{ borderStyle: "single", borderColor: "gray", paddingX: 1 },
-		h(Text, { wrap: "truncate" }, line)
+		{ flexDirection: "row", paddingX: 1 },
+		...left,
+		h(Box, { flexGrow: 1 }),
+		right
 	);
 }
 
@@ -92,20 +89,41 @@ function MessageRow({ message, currentNow = null }) {
 			const elapsed = currentNow - (message.time || message.sentAt || 0);
 			if (elapsed > 8000) { suffix = `（仍在处理… ${Math.round(elapsed / 1000)}s）`; warn = true; }
 		}
+		// 用户消息：整行暗灰背景横条（对标 Claude Code），只在开头保留很暗的 `>`，
+		// 让用户输入与 assistant 正文自然分组；pending 用状态前缀提示。
+		const badge = pending ? (warn ? "⚠" : "⟳") : ">";
+		const bg = "#333333";
 		return h(
 			Box,
-			{ key: undefined },
-			h(Text, { bold: true, color: warn ? "red" : "green" }, pending ? (warn ? "⚠ " : "⟳ ") : "❯ "),
-			h(Text, {}, body),
-			suffix ? h(Text, { dim: true, color: warn ? "red" : "yellow" }, suffix) : null
+			{ key: undefined, width: "100%", paddingX: 1, backgroundColor: bg },
+			h(Text, { bold: true, color: warn ? "red" : "green" }, `${badge} `),
+			h(Text, { color: warn ? "#ff7777" : undefined }, body),
+			suffix ? h(Text, { color: warn ? "#ff7777" : "#bbbbbb" }, `  ${suffix}`) : null
 		);
 	}
-	// assistant：正文前不加常驻前缀（Claude Code 风格）；流式草稿的 ◉ 由 ConversationList 单独渲染。
-	// host 回了但没生成文本时给明确占位，避免显示成空行/像没返回。
+	// assistant：小圆点作为轮次锚点（Claude Code 风格），正文保持宽松留白 + 缩进。
+	// host 回了但没生成文本时给明确占位。
+	if (!body) {
+		return h(
+			Box,
+			{},
+			h(Text, { color: "magenta", bold: true }, "● "),
+			h(Text, { dim: true, color: "gray" }, "（已收到回复，但模型未生成文本内容）")
+		);
+	}
+	const lines = body.split("\n");
+	const first = lines[0];
+	const rest = lines.slice(1);
 	return h(
 		Box,
-		{},
-		body ? h(Text, {}, body) : h(Text, { dim: true, color: "gray" }, "（已收到回复，但模型未生成文本内容）")
+		{ flexDirection: "column" },
+		h(
+			Box,
+			{},
+			h(Text, { color: "magenta", bold: true }, "● "),
+			h(Text, {}, first)
+		),
+		...rest.map((l, i) => h(Box, { key: `r${i}`, paddingLeft: 2 }, h(Text, {}, l)))
 	);
 }
 
@@ -116,7 +134,7 @@ export function ConversationList({ messages, streaming, now }) {
 	const visible = messages.length > WINDOW ? messages.slice(-WINDOW) : messages;
 	const rows = visible.map((m, i) => h(MessageRow, { key: typeof m.seq === "number" && m.seq >= 0 ? m.seq : `idx-${i}`, message: m, currentNow: now }));
 	if (streaming && streaming.text) {
-		rows.push(h(Box, { key: "stream" }, h(Text, { dim: true, color: "magenta" }, "◉ "), h(Text, { dim: true }, String(streaming.text))));
+		rows.push(h(Box, { key: "stream" }, h(Text, { color: "cyan", bold: true }, "● "), h(Text, { dim: true }, String(streaming.text))));
 	}
 	return h(Box, { flexDirection: "column" }, ...rows);
 }
@@ -166,14 +184,32 @@ export function MentionPanel({ candidates, active = 0 }) {
 export function CommandInput({ vim }) {
 	const text = submitText(vim);
 	const insert = vim.mode === "insert";
-	// insert 模式：Claude Code 风格的 `>` 命令提示 + 光标；normal 模式：保留 NORMAL 徽标可见编辑。
-	const prompt = insert ? h(Text, { color: "green", bold: true }, "> ") : h(Text, { color: "yellow", bold: true }, "∶ ");
+	// 对标 Claude Code：输入区用上下两条细线（去绿矩形框、大号 INSERT 徽标），
+	// 保留 Vim 模态但弱化：insert=`>`、normal=`:`，permission/mode 放右侧。
+	const prompt = insert ? h(Text, { color: "green", bold: true }, "> ") : h(Text, { color: "yellow", bold: true }, ": ");
+	const modeTag = insert
+		? h(Text, { dim: true, color: "green" }, " insert")
+		: h(Text, { dim: true, color: "yellow" }, " NORMAL");
+	const cursorInsert = insert ? h(Text, {}, text + "▌") : h(Text, {}, text);
 	return h(
 		Box,
-		{ borderStyle: "single", borderColor: insert ? "green" : "cyan", paddingX: 1 },
-		insert ? h(Text, { color: "green", bold: true }, " INSERT ") : h(Text, { color: "yellow", bold: true }, " NORMAL "),
-		prompt,
-		h(Text, {}, `${text}${insert ? "▌" : ""}`)
+		{
+			flexDirection: "column",
+			// 只保留上下边框细线，去掉左右/矩形框（Claude Code 输入区分隔线风格）
+			borderStyle: "single",
+			borderColor: "gray",
+			borderLeft: false,
+			borderRight: false,
+			paddingX: 1
+		},
+		h(
+			Box,
+			{ flexDirection: "row" },
+			prompt,
+			cursorInsert,
+			h(Box, { flexGrow: 1 }),
+			modeTag
+		)
 	);
 }
 
@@ -576,7 +612,14 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 	const mentionCandidates = mentionIntent.kind === "mention"
 		? buildMentionCandidates(mentionIntent.rest, cwdFiles, 8)
 		: [];
-	const uiMode = modeLabel(deriveMode(snapshot, { showHelp }));
+	// 回合耗时入消息流（Claude Code `✻ Worked for 8s`）：仅当一回合刚完成且有时钟时显示，
+	// 避免一直占着 HUD；运行时 HUD 已不再重复显示 ⏱（item ④ 已去掉）。
+	const workedLabel = (() => {
+		if (snapshot.running) return null;
+		if (!snapshot.turnStartTime || !snapshot.lastTurnEnd) return null;
+		const dur = formatDuration(now - snapshot.turnStartTime);
+		return dur ? `✻ Worked for ${dur}` : null;
+	})();
 
 	return h(
 		Box,
@@ -585,6 +628,9 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		h(Box, { flexDirection: "column", flexGrow: 1, minHeight: 2 },
 			h(Banner, { hud }),
 			ConversationList({ messages: snapshot.messages, streaming: snapshot.streaming, now }),
+			workedLabel
+				? h(Box, { key: "worked", marginTop: 1 }, h(Text, { dim: true, color: "gray" }, workedLabel))
+				: null,
 			snapshot.messages.length === 0 && !(snapshot.streaming && snapshot.streaming.text)
 				? h(Box, { key: "empty", flexDirection: "column", marginTop: 1 },
 						h(Text, { dim: true }, "开始对话 — 直接输入并按 Enter 发送。"),
@@ -603,7 +649,7 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		h(SlashPanel, { panel: slashPanel }),
 		h(Notice, { notice: snapshot.notice }),
 		// HUD 放在输入框上方（贴近底部）——用户从最底部输入，HUD 常驻可见
-		h(HUD, { hud, uiMode, docsLabel, agentCount: (snapshot.subagents || []).length }),
+		h(HUD, { hud }),
 		h(CommandInput, { vim })
 	);
 }
