@@ -235,6 +235,17 @@ export function Notice({ notice }) {
 	return h(Box, { borderStyle: "round", borderColor: "yellow", paddingX: 1 }, h(Text, {}, String(notice)));
 }
 
+/** 流错误横幅（P1 #7）：snapshot.error 之前不渲染，真实错误会表现成「没有输出」。 */
+export function ErrorBanner({ error }) {
+	if (!error) return null;
+	return h(
+		Box,
+		{ borderStyle: "round", borderColor: "red", paddingX: 1 },
+		h(Text, { color: "red", bold: true }, `✗ 错误：${String(error)}`),
+		h(Text, { color: "gray" }, "  （可 Ctrl+C 中断后重发，或退出重进）")
+	);
+}
+
 /** @引用文件补全面板（OpenCode 心智）：展示当前 `@xxx` 的候选文件，Tab/方向键选择。 */
 export function MentionPanel({ candidates, active = 0 }) {
 	if (!candidates || candidates.length === 0) return null;
@@ -838,6 +849,7 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		mentionCandidates.length > 0 ? h(MentionPanel, { candidates: mentionCandidates, active: mentionActive }) : null,
 		h(SlashPanel, { panel: slashPanel }),
 		h(Notice, { notice: snapshot.notice }),
+		h(ErrorBanner, { error: snapshot.error }),
 		// HUD 放在输入框上方（贴近底部）——用户从最底部输入，HUD 常驻可见
 		h(HUD, { hud }),
 		h(CommandInput, { vim })
