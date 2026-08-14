@@ -327,3 +327,8 @@ export interface UsageBuckets { input: number; output: number; cacheRead: number
 export function usageZero(): UsageBuckets;
 export function dedupeUsage(messages: Array<{ seq?: number; usage?: object; text?: string; role?: string }>): UsageBuckets;
 export function hasAnyUsage(u: UsageBuckets | null): boolean;
+
+// ---------- mode ----------
+export const GLOBAL_MODES: { CHAT: string; APPROVING: string; COMMAND: string; COMPLETE: string; HISTORY: string; HELP: string };
+export function transitionMode(from: string, to: string): { ok: boolean; to: string | null };
+export function keyOwner(mode: string, key: { key?: string; ctrl?: boolean; shift?: boolean; meta?: boolean }): string | null;
