@@ -7,7 +7,7 @@
  */
 import { createElement as h } from "react";
 import { useState, useEffect, useRef } from "react";
-import { Box, Text, useInput } from "ink";
+import { Box, Text, useInput, useWindowSize } from "ink";
 import { hudState, formatCost, contextWindowLabel, formatDuration, toolDurationLabel, formatTokens } from "../lib/hud.js";
 import { buildSlashPanel } from "../lib/slash.js";
 import { createVim, submitText } from "../lib/vim.js";
@@ -175,12 +175,13 @@ function MessageRow({ message, currentNow = null }) {
 	return h(MarkdownBody, { text: body });
 }
 
-export function ConversationList({ messages, streaming, now }) {
-	// 正序渲染。为防"最新消息被 Ink 顶出屏幕"，只渲染最近 N 条做窗口，
-	// 配合 flexGrow 让 INPUT 常驻底部；窗口保证最新回复始终在可视尾。
-	const WINDOW = 60;
-	const visible = messages.length > WINDOW ? messages.slice(-WINDOW) : messages;
-	const rows = visible.map((m, i) => h(MessageRow, { key: typeof m.seq === "number" && m.seq >= 0 ? m.seq : `idx-${i}`, message: m, currentNow: now }));
+export function ConversationList({ messages, streaming, now, viewport }) {
+	// 按「终端视觉行预算」从最新往前保留尾部（viewport 纯函数算出 start 下标）。
+	// 修复根因：旧实现按消息条数 WINDOW=60 截断，一条 Markdown/代码块消息几十个视觉行，
+	// 会把输入区/HUD 顶出屏幕、视口跳回第一轮。
+	const start = viewport ? viewport.start : Math.max(0, messages.length - 60);
+	const visible = start > 0 ? messages.slice(start) : messages;
+	const rows = visible.map((m, i) => h(MessageRow, { key: typeof m.seq === "number" && m.seq >= 0 ? m.seq : `idx-${start + i}`, message: m, currentNow: now }));
 	if (streaming && streaming.text) {
 		rows.push(h(Box, { key: "stream" }, h(Text, { color: "cyan", bold: true }, "● "), h(Text, { dim: true }, String(streaming.text))));
 	}
@@ -442,6 +443,8 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 	const [mentionActive, setMentionActive] = useState(0);
 	// 每秒刷新时钟（pending 超时提示用）
 	const [now, setNow] = useState(() => Date.now());
+	// 终端尺寸（columns/rows）：用于按视觉行预算裁剪消息区，长历史不顶走输入区；resize 会触发重渲染。
+	const { columns, rows } = useWindowSize();
 
 	useEffect(() => {
 		const t = setInterval(() => setNow(Date.now()), 1000);
@@ -669,13 +672,30 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		return dur ? `✻ Worked for ${dur}` : null;
 	})();
 
+	// 计算消息区可视预算：终端高 − 固定元素（banner/hud/input/worked/docks/余量），
+	// 再用 tailWithinBudget 从最新往前保留尾部。修 root cause：消息条数截断改为视觉行预算截断。
+	const docksRows =
+		((snapshot.pendingApprovals && snapshot.pendingApprovals.length ? 3 + snapshot.pendingApprovals.length : 0) +
+			((snapshot.tools && snapshot.tools.length ? Math.min(snapshot.tools.length, 5) + 1 : 0)) +
+			((snapshot.queue && snapshot.queue.length ? Math.min(snapshot.queue.length, 3) + 1 : 0)) +
+			((snapshot.subagents && snapshot.subagents.length ? Math.min(snapshot.subagents.length, 3) + 1 : 0)));
+	const msgBudget = messageBudget(rows || 30, {
+		banner: 2,
+		hud: 1,
+		input: 2,
+		worked: workedLabel ? 1 : 0,
+		docks: docksRows,
+		margin: 2
+	});
+	const viewport = tailWithinBudget(snapshot.messages, msgBudget, columns || 80);
+
 	return h(
 		Box,
 		{ flexDirection: "column", flexGrow: 1 },
 		// 消息区：全部消息 + 流式草稿（普通渲染，一次可见，不用 <Static> 以避免漏显）。
 		h(Box, { flexDirection: "column", flexGrow: 1, minHeight: 2 },
 			h(Banner, { hud }),
-			ConversationList({ messages: snapshot.messages, streaming: snapshot.streaming, now }),
+			ConversationList({ messages: snapshot.messages, streaming: snapshot.streaming, now, viewport }),
 			workedLabel
 				? h(Box, { key: "worked", marginTop: 1 }, h(Text, { dim: true, color: "gray" }, workedLabel))
 				: null,
@@ -713,5 +733,6 @@ import { projectDocsLabel } from "../lib/docs.js";
 import { detectIntent, buildMentionCandidates } from "../lib/mention.js";
 import { toolSummary } from "../lib/tool-summary.js";
 import { parseMarkdown, inlineFragments } from "../lib/markdown.js";
+import { tailWithinBudget, messageBudget } from "../lib/viewport.js";
 
 const require = createRequire(import.meta.url);

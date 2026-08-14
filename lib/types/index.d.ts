@@ -292,3 +292,10 @@ export type MarkdownBlock =
 export function parseMarkdown(text: string): Array<MarkdownBlock>;
 export type InlineFragment = { kind: "text" | "bold" | "code"; content: string };
 export function inlineFragments(text: string): Array<InlineFragment>;
+
+// ---------- viewport ----------
+export function displayWidth(text: string): number;
+export function wrapLines(text: string, columns: number): number;
+export function estimateMessageRows(msg: { role?: string; text?: string }, columns: number, opts?: { userIndent?: number }): number;
+export function tailWithinBudget(messages: Array<{ text?: string; role?: string }>, budget: number, columns: number): { start: number; lines: number };
+export function messageBudget(terminalRows: number, fixed?: object): number;
