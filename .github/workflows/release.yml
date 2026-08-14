@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "版本号（如 0.1.0）；留空用 package.json 的"
+        description: "版本号（如 0.1.0）；留空则读 package.json 的 version（防止 tag 与实际版本漂移）"
         required: false
 
 permissions:
@@ -20,8 +20,19 @@ jobs:
           node-version: 22
           registry-url: https://registry.npmjs.org/
 
+      # 版本决定：手动输入优先；否则从 package.json 读（保持 npm tag 与源码同源）
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: |
+          IN="${{ github.event.inputs.version }}"
+          VER="${IN:-$(node -p "require('./package.json').version")}"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "tag_name=v$VER" >> "$GITHUB_OUTPUT"
+
       - run: npm ci
       - run: npm test
+      - run: npm run check
 
       - name: npm publish
         run: npm publish --access public
@@ -31,6 +42,6 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ github.event.inputs.version || '0.1.0' }}
-          name: v${{ github.event.inputs.version || '0.1.0' }}
+          tag_name: ${{ steps.version.outputs.tag_name }}
+          name: ${{ steps.version.outputs.tag_name }}
           generate_release_notes: true

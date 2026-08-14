@@ -1,7 +1,8 @@
 // 单元飞轮：LiveConversation —— fake client + 可控帧流，验证基线/增量/流式草稿。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { LiveConversation, initialState } from "../lib/live.js";
+import { LiveConversation, initialState, mergeToolsByCallId } from "../lib/live.js";
+import { foldEvents } from "../lib/fold.js";
 
 /** 可手动 push 帧的假 mux 流（yield MuxStream 信封：{rpcId, payload}）。 */
 class FakeStream {
@@ -359,4 +360,63 @@ test("resolveStuckPending：超时未落定的 pending 被标 stuck，正常 pen
 	const fresh = st.messages.find((m) => m.text === "新消息");
 	assert.equal(old.stuck, true, "超时的 pending 应标 stuck");
 	assert.ok(fresh.stuck === undefined, "未超时的 pending 不应标 stuck");
+});
+
+// ---- Codex 评审 #5：history 兜底应能落定 running=false ----
+test("refreshHistory：mux 漏掉 turn/end 时，history 兜底把 running 落定 false", async () => {
+	// 基线：一轮 turn/start 但【无 turn/end】（模拟 host 还在跑 / mux 断了）
+	const baseline = [
+		mkEvent("turn/start", { turn: 1 }, 0),
+		mkEvent("user/message", { source: { kind: "user" }, content: [{ type: "text", text: "问题" }] }, 1),
+		mkEvent("assistant/message", { turn: 1, step: 0, message: { id: "m1", role: "assistant", content: [{ type: "text", text: "回答" }], source: { kind: "model" } }, usage: {} }, 2)
+	];
+	const { client, conv, snapshots } = setup(baseline);
+	await conv.open();
+	// 模拟 mux 已把本回合置为 running（turn/start 已到，但 turn/end 没来）
+	conv.state.running = true;
+	conv.emit();
+
+	// host 实际已完成该回合（history 补上了 turn/end）
+	client.baselineEvents = baseline.concat([mkEvent("turn/end", { turn: 1, reason: { kind: "completed" } }, 3)]);
+	const changed = await conv.refreshHistory();
+	assert.equal(changed, true);
+	assert.equal(conv.snapshot().running, false, "history 看到 turn/end 后 running 应落定 false");
+	assert.equal(conv.snapshot().lastTurnEnd.reason.kind, "completed");
+});
+
+test("refreshHistory：无新事件时返回 false 且不改 running", async () => {
+	const baseline = [mkEvent("turn/start", { turn: 1 }, 0)];
+	const { conv } = setup(baseline);
+	await conv.open();
+	conv.state.running = true;
+	const changed = await conv.refreshHistory();
+	// 无 turn/end、无消息、无工具 → 不应误判，running 保持 true（turn 仍在进行）
+	assert.equal(changed, false);
+	assert.equal(conv.snapshot().running, true);
+});
+// ---- Codex 评审 #4：工具状态按 callId 合并，避免重复卡/永久 running ----
+test("mergeToolsByCallId：tool/result（缺 name）就地更新已有 running 卡，保留 name/args", () => {
+	const existing = [{ seq: 1, callId: "c1", name: "run_code", args: "x", status: "running" }];
+	const result = [{ seq: 3, callId: "c1", name: undefined, args: "", status: "done", finishedAt: 1000 }];
+	const merged = mergeToolsByCallId(existing, result);
+	assert.equal(merged.length, 1, "不应新增重复卡");
+	assert.equal(merged[0].status, "done");
+	assert.equal(merged[0].name, "run_code", "保留原 name");
+	assert.equal(merged[0].finishedAt, 1000);
+});
+
+test("mergeToolsByCallId：无 callId 的新工具追加；含 callId 的追加", () => {
+	const out = mergeToolsByCallId([{ callId: "c1", name: "a", status: "running" }], [{ callId: "c2", name: "b", status: "running" }]);
+	assert.equal(out.length, 2);
+	assert.equal(mergeToolsByCallId([], [{ callId: "x", status: "running" }]).length, 1);
+});
+
+test("foldEvents：单独 tool/result 产出「状态更新」工具项，供 live 层按 callId 合并", () => {
+	const view = foldEvents([
+		{ event: { type: "tool/result", seq: 3, time: 1000, data: { turn: 1, step: 0, message: { id: "m", role: "user", content: [{ type: "tool-result", toolCallId: "c1", content: [] }], source: { kind: "tool" } } } } }
+	]);
+	assert.equal(view.tools.length, 1);
+	assert.equal(view.tools[0].callId, "c1");
+	assert.equal(view.tools[0].status, "done", "单独 result 也应标 done（供 live 合并用）");
+	assert.equal(view.tools[0].finishedAt, 1000);
 });

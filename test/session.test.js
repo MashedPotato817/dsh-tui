@@ -156,8 +156,7 @@ test("converse 复用时只认 prompt 之后的新轮（不把旧轮当本轮）
 	const session = await Session.create(host);
 	// 第一轮：完整走完
 	const first = await session.converse("第一问", { timeoutMs: 2000, pollMs: 5 });
-	assert.equal(first.turnEnd.turn, 1);
-	// 第二轮：基线后应出现 turn=2 的新轮
+	assert.equal(first.turnEnd.turn, 1);// 第二轮：基线后应出现 turn=2 的新轮
 	const second = await session.converse("第二问", { timeoutMs: 2000, pollMs: 5 });
 	assert.equal(second.turnEnd.turn, 2);
 	assert.deepEqual(second.messages.map((m) => m.text), ["第一问", "回答 1", "第二问", "回答 2"]);
@@ -197,4 +196,36 @@ test("converse 收到 slash 命令 → 返回 command 且不等待回合", async
 	const view = await session.converse("/status", { timeoutMs: 200 });
 	assert.equal(view.command.kind, "success");
 	assert.equal(view.turnEnd, null); // 没有等待回合
+});
+
+test("converse 不会把旧轮的 turn/end 当成当前轮的（新 user 事件出现但新轮未结束时仍继续等）", async () => {
+	// 场景（Codex 评审 #2）：会话里已有一条**旧的已完成回合**；本次 prompt 后只有新 user/message
+	// 出现（推进了 lastSeq），但新轮 turn/end 迟迟不到。旧实现因 `view.lastSeq > baseSeq`
+	// 提前 return 了旧 turn；修复后应按 `turnEnd.seq > baseSeq` 继续等 → 超时。
+	const base = [
+		{ type: "turn/start", seq: 0, time: 0, data: { turn: 1 } },
+		{ type: "user/message", seq: 1, time: 1, data: { source: { kind: "user" }, content: [{ type: "text", text: "旧问题" }] } },
+		{ type: "assistant/message", seq: 2, time: 2, data: { turn: 1, step: 0, message: { id: "m1", role: "assistant", content: [{ type: "text", text: "旧回答" }], source: { kind: "model" } }, usage: {} } },
+		{ type: "turn/end", seq: 3, time: 3, data: { turn: 1, reason: { kind: "completed" } } } // 旧轮已结束
+	];
+	// 基线页：回完整旧轮（baseSeq=3，旧 turn/end 已在基线内）；之后回「旧轮 + 新 user/message」（永不结束新轮）。
+	const host = {
+		request: async (method) => {
+			if (method === "session.history") {
+				return {
+					events: base.concat([
+						{ type: "user/message", seq: 4, time: 4, data: { source: { kind: "user" }, content: [{ type: "text", text: "新问题" }] } }
+					]).map((event) => ({ event })),
+					hasMore: false
+				};
+			}
+			if (method === "session.prompt") return { accepted: true };
+			throw new Error(`unexpected ${method}`);
+		}
+	};
+	const session = new Session(host, "session-fake", { agentPreset: "code" });
+	await assert.rejects(() => session.converse("新问题", { timeoutMs: 80, pollMs: 10 }), (error) => {
+		assert.equal(error.code, "turn-timeout", "新轮未结束应超时而非提前返回旧轮");
+		return true;
+	});
 });

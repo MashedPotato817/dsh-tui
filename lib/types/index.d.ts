@@ -48,6 +48,10 @@ export interface SessionMeta {
   agentPreset?: string | null;
   cwd?: string | null;
 }
+export interface HistoryPage {
+  events: Array<object>;
+  nextBeforeSeq?: number | null;
+}
 export class Session {
   client: unknown;
   sessionId: string;
@@ -58,26 +62,30 @@ export class Session {
   static open(client: unknown, id: string): Promise<Session>;
   static openRecent(client: unknown): Promise<Session | null>;
   static list(client: unknown): Promise<Array<{ sessionId: string; running?: boolean; agentPreset?: string; blank?: boolean }>>;
-  history(opts?: { maxMessages?: number }): Promise<{ events: Array<object> }>;
+  history(opts?: { beforeSeq?: number; maxMessages?: number }): Promise<HistoryPage>;
+  prompt(text: string, opts?: { mode?: "queue" }): Promise<unknown>;
+  converse(text: string, opts?: { timeoutMs?: number; pollMs?: number }): Promise<string | null>;
 }
 
 // ---------- client ----------
 export class DshClient {
-  constructor(baseUrl: string);
-  call<T = unknown>(method: string, payload?: object): Promise<T>;
+  constructor(baseUrl?: string);
+  baseUrl: string;
+  request<T = unknown>(method: string, payload?: object): Promise<T>;
+  respond(rpcId: string, result: object): Promise<{ accepted: boolean; reason?: string }>;
 }
 export function mintRpcId(): string;
 
 // ---------- stream ----------
 export class MuxStream {
+  constructor(client: DshClient, sessionId: string);
   frames(opts?: { signal?: AbortSignal }): AsyncGenerator<{ rpcId?: string; payload: unknown }>;
 }
-export function respond(rpcId: string, result: object): Promise<void>;
+export function respond(client: DshClient, rpcId: string, result: object): Promise<unknown>;
 export function extractSseData(line: string): string | null;
 export function parseServerRequest(data: string): unknown | null;
 
 // ---------- live ----------
-import type { FoldedView, FoldedMessage } from "./index.js";
 export function initialState(): LiveState;
 export interface LiveState {
   messages: FoldedMessage[];
@@ -107,7 +115,11 @@ export class LiveConversation {
     session: Session;
     stream?: MuxStream;
     onState?: (state: LiveState) => void;
-    policy?: { editableTools?: Array<string>; allowTools?: Array<string> } | null;
+    policy?: {
+      editableTools?: Array<string>;
+      allowTools?: Array<string>;
+      questions?: Record<string, unknown>;
+    } | null;
     approvalMode?: string;
   });
   state: LiveState;
@@ -119,13 +131,16 @@ export class LiveConversation {
   close(): void;
   send(text: string): Promise<unknown>;
   cancelTurn(): Promise<void>;
-  answerApproval(approval: object, decision: string): Promise<void>;
+  answerApproval(approval: object, outcome: string): Promise<void>;
+  answerQuestion(q: object, answers: Array<{ id: string; selected: Array<string> }>): Promise<void>;
   switchSession(session: Session): Promise<void>;
-  setPermissionMode(mode: string): void;
-  startHistorySync?(): void;
+  setPermissionMode(mode: string): string;
+  startHistorySync(intervalMs?: number): void;
+  resolveStuckPending(stuckAfterMs?: number): void;
+  refreshHistory(): Promise<boolean>;
   refreshSubagents?(): Promise<void>;
-  childState(): unknown;
 }
+export function mergeToolsByCallId(existing?: Array<FoldedTool>, incoming?: Array<Partial<FoldedTool>>): Array<FoldedTool>;
 
 // ---------- vim ----------
 export const MODES: { NORMAL: string; INSERT: string };
@@ -136,7 +151,7 @@ export interface VimState {
   cursor: { row: number; col: number };
   pending: string;
 }
-export function vimKey(key: object): string | null;
+export function vimKey(prev: VimState, key: string): { state: VimState; action: "none" | "submit" | "run-command"; command?: string };
 export function submitText(state: VimState): string;
 
 // ---------- bridge ----------
@@ -179,6 +194,7 @@ export function toolDurationLabel(start: number | null, end: number | null): str
 export const DEFAULT_PRICES: Record<string, { input: number; output: number; cacheRead?: number }>;
 
 // ---------- slash ----------
+export function commandGroup(name: string): { name: string; scope?: string };
 export function filterCommands(input: string, commands: Array<object>): Array<object>;
 export function buildSlashPanel(input: string, commands: Array<object>, opts?: { active?: number }): { items: Array<{ name: string; description?: string }>; active: number } | null;
 export const BUILTIN_COMMANDS: Array<object>;
@@ -191,14 +207,17 @@ export function allCommands(): Array<{ name: string; description?: string; local
 export const LOCAL_COMMANDS: Array<object>;
 
 // ---------- policy ----------
-export function answerQuestions(state: object, mode: string): Array<{ questionId: string; answer: string }>;
-export function answerApproval(approval: object, decision: string): { decision: string };
-export function hasPlanReview(state: object): boolean;
-export function declinePlan(state: object): boolean;
+export interface Question { id: string; options?: Array<{ label: string }>; intent?: { kind: string; approve?: string } }
+export interface QuestionAnswerSet { sessionId: string; answer: { answers: Array<{ id: string; selected: Array<string> }> } }
+export function answerQuestions(sessionId: string, questions: Array<Question>, policy?: object): QuestionAnswerSet;
+export function answerApproval(sessionId: string, approval: { approvalId?: string; toolName?: string }, policy?: object): { sessionId: string; approvalId?: string; outcome: string };
+export function hasPlanReview(questions: Array<unknown> | null | undefined): boolean;
+export function declinePlan(sessionId: string, questions: Array<Question>): QuestionAnswerSet;
 
 // ---------- registry ----------
-export function readRecent(): { sessionId?: string; cwd?: string; agentPreset?: string } | null;
-export function writeRecent(sessionId: string, meta?: object): void;
+export interface RecentMeta { sessionId: string; cwd?: string; agentPreset?: string; recordedAt?: number }
+export function readRecent(): RecentMeta | null;
+export function writeRecent(sessionId: string, meta?: { cwd?: string; agentPreset?: string; recordedAt?: number }): void;
 export function clearRecent(): void;
 
 // ---------- permission ----------
@@ -211,14 +230,22 @@ export function modeBadge(mode: string): string;
 export function modeColor(mode: string): string;
 
 // ---------- command-loader ----------
-export function parseFrontmatter(md: string): { name?: string; description?: string };
-export function loadCustomCommands(opts: { projectDir?: string }): Array<object>;
+export interface CustomCommand { name: string; description?: string; body?: string; source: string }
+export function parseFrontmatter(text: string): { description?: string; [key: string]: unknown };
+export function listCommandsFromDir(dir: string, opts?: { source?: string }): Array<CustomCommand>;
+export function loadCustomCommands(opts?: { cwd?: string; home?: string; projectDir?: string }): Array<CustomCommand>;
 
 // ---------- config ----------
+export interface RuntimeConfig {
+  approvalMode: string;
+  permissionMode: string;
+  editableTools?: Array<string>;
+  allowTools?: Array<string>;
+}
 export function defaultConfig(): object;
 export function parseConfig(text: string): object | null;
-export function loadConfig(): object;
-export function configToRuntime(config: object): { approvalMode: string; permissionMode: string; editableTools?: Array<string>; allowTools?: Array<string> };
+export function loadConfig(filePath?: string, opts?: object): object;
+export function configToRuntime(cfg?: object): RuntimeConfig;
 
 // ---------- history ----------
 export function createHistory(): object;

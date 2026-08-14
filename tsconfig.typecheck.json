@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "es2022",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": false,
+    "esModuleInterop": true,
+    "allowJs": false,
+    "types": [],
+    "baseUrl": ".",
+    "paths": {
+      "dsh-tui": ["lib/types/index.d.ts"],
+      "dsh-tui/docs": ["lib/types/docs.d.ts"],
+      "dsh-tui/version": ["lib/types/version.d.ts"],
+      "dsh-tui/mention": ["lib/types/mention.d.ts"]
+    }
+  },
+  "files": ["test/types-consumer.ts"]
+}
