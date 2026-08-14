@@ -12,7 +12,7 @@
 - 当前版本 0.2.15，已发布到 npm（`latest`），GitHub tag `v0.2.12~v0.2.15` 已对齐（每次 publish 后用 `npm run tag` 自动打标）。
 
 ## 关键命令
-- `npm test` —— 单元飞轮（当前 135 例，全部通过）
+- `npm test` —— 单元飞轮（当前 194 例，全部通过）
 - `npm run check` —— 语法检查
 - `npm run test:live` —— 真实 host 链路（需本机开着 DSH host + 模型 key，可跳过）
 - `npm run smoke:interactive` —— node-pty 真实 TTY 冒烟

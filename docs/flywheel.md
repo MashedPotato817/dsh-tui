@@ -18,7 +18,7 @@ live 测试默认跳过（需要 `DSH_TEST_LIVE=1`），由脚本自动注入；
 
 ### 当前覆盖（里程碑 3–5）
 
-- `test/` 单元飞轮（73 例）：fold 事件折叠、Session 模型（FakeHost）、mux SSE 传输、
+- `test/` 单元飞轮（194 例）：fold 事件折叠、Session 模型（FakeHost）、mux SSE 传输、
   LiveConversation（基线/增量/流式草稿/应答/切换）、Vim 模态、HUD、输入桥、slash 面板、
   会话记忆、应答策略、UI renderToString 冒烟。
 - `test-live/` live 飞轮（3 例）：PTC 全链路、真实 mux 流式、会话恢复历史。
