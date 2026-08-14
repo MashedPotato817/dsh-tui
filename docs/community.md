@@ -34,6 +34,14 @@ dsh-tui 隶属于 DSH 生态（见 `dsh-ecosystem` 的 `ROADMAP.md`）。相关�
 3. **修复 + 测试**：core 层改动用单测覆盖；UI 改动用 renderToString 冒烟；真实链路用 `test-live/`。
 4. **发布**：通过后 bump 版本（`0.2.x` 语义化）、发布 npm、Push 备份。
 
+### 发布即对齐（飞轮嵌合度关键）
+发布不止是「npm publish」。为保证三处一致、用户反馈对到同一版本：
+1. `npm publish` → npm `latest` 更新。
+2. `npm run tag`（`scripts/tag-version.mjs --push`）→ 给当前 commit 打 `vX.Y.Z` 并 push 到 GitHub。
+3. 若该版本要作为稳定版，把 `feat/*` 合并进 `main` 并 push（由维护者确认后执行）。
+4. 在 GitHub Releases 页为对应 tag 写 changelog（可选，但建议）。
+> 校验：`npm view dsh-tui version` ≡ 本地 `package.json` ≡ GitHub 最新 tag 指向的 commit。
+
 ## 三、反馈升级飞轮（Feedback Upgrade Flywheel）
 
 「反馈 → 定位 → 修复 → 测试 → 发布 → 用户验证 → 更高质量反馈」的持续循环。
