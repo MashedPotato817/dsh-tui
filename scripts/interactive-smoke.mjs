@@ -91,10 +91,15 @@ async function run() {
 			fail("输入区标记（insert）不可见：输入区可能被历史顶出屏幕");
 		}
 
-		// 7. 应用级 follow-tail：PageUp 上翻 → 应出现「回到底部」提示且不跳顶；End 回到底部
+		// 7. 应用级 follow-tail：PageUp 上翻 → 应出现「回到底部」提示且不跳顶；End 回到底部。
+		// 用轮询而非固定 sleep，避免渲染调度抖动导致误判（相位计时 etc 使内容更密集）。
 		pty.write("\x1b[5~"); // PageUp
-		await sleep(500);
-		if (buffer.includes("End 回到底部") || buffer.includes("上面还有历史")) {
+		let hintSeen = false;
+		for (let i = 0; i < 30 && !hintSeen; i++) {
+			await sleep(100);
+			if (buffer.includes("End 回到底部") || buffer.includes("上面还有历史")) hintSeen = true;
+		}
+		if (hintSeen) {
 			console.log("follow-tail: PageUp 显示回到底部提示 OK");
 		} else {
 			fail("PageUp 后未出现「End 回到底部」提示（follow-tail 提示缺失）");

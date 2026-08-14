@@ -700,7 +700,9 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		if (snapshot.running) return null;
 		if (!snapshot.turnStartTime || !snapshot.lastTurnEnd) return null;
 		const dur = formatDuration(now - snapshot.turnStartTime);
-		return dur ? `✻ Worked for ${dur}` : null;
+		// 追加分相计时（Thinking/Response/Tools），如 `✻ Worked for 8s · Thinking 2.0s`
+		const phase = snapshot.phaseTiming ? ` · ${snapshot.phaseTiming}` : "";
+		return dur ? `✻ Worked for ${dur}${phase}` : snapshot.phaseTiming;
 	})();
 
 	// 计算消息区可视预算：终端高 − 固定元素（banner/hud/input/worked/docks/余量），

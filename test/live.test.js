@@ -496,3 +496,20 @@ test("foldEvents：单独 tool/result 产出「状态更新」工具项，供 li
 	assert.equal(view.tools[0].status, "done", "单独 result 也应标 done（供 live 合并用）");
 	assert.equal(view.tools[0].finishedAt, 1000);
 });
+
+test("相位计时：reasoning→text→tool 分相累加，turn/end 写 phaseTiming 摘要", async () => {
+	const { conv, stream } = setup();
+	await conv.open();
+	// turn/start + 各相位 delta + turn/end（带时间推进）
+	stream.push({ type: "session/event", sessionId: "s1", event: mkEvent("turn/start", { turn: 1 }, 1) });
+	stream.push({ type: "session/event", sessionId: "s1", event: mkEvent("assistant/chunk", { turn: 1, step: 0, chunk: { type: "reasoning-delta", index: 0, text: "想" } }, 2) });
+	stream.push({ type: "session/event", sessionId: "s1", event: mkEvent("assistant/chunk", { turn: 1, step: 0, chunk: { type: "text-delta", index: 0, text: "答" } }, 3) });
+	stream.push({ type: "session/event", sessionId: "s1", event: mkEvent("assistant/chunk", { turn: 1, step: 0, chunk: { type: "tool-call-delta", index: 1, id: "t1", name: "read", argumentsDelta: "{}" } }, 4) });
+	await tick();
+	stream.push({ type: "session/event", sessionId: "s1", event: mkEvent("turn/end", { turn: 1, reason: { kind: "completed" } }, 5) });
+	await tick();
+	const st = conv.snapshot();
+	// phaseTiming 已生成（Thinking/Response/Tools 至少各出现一次 -> 摘要非空）
+	assert.ok(st.phaseTiming, `应生成分相计时摘要，实际 ${st.phaseTiming}`);
+	assert.match(st.phaseTiming, /Thinking|Response|Tools/);
+});
