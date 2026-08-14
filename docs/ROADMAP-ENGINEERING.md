@@ -38,9 +38,9 @@
 - [x] 计时改共享游标单次扫描 → `lib/timing.js` createTimingAccumulator/advanceTiming（O(events) 防二次方退化），已接入 live 相位分相。
 
 ### Batch 4 —— 性能与渲染（在已有 follow-tail / markdown 之上）
-- [ ] 流式期轻渲染 vs settle 完整 Markdown 分离。
-- [ ] 定稿消息/工具卡按 width 行缓存，状态变更才失效。
-- [ ] token 按 turn:step 去重 + 上下文压力提示。
+- [x] 流式期轻渲染 vs settle 完整 Markdown 分离 → 按构造已满足：`text-delta`/`reasoning-delta`/`tool-call-delta` 立即写 `_draftBlocks` 作为轻量草稿视图（`state.streaming`），`assistant/message` 时清空草稿、正文转入落定的完整 Markdown 消息列表（lib/live.js #applyChunk）。
+- [x] 定稿消息/工具卡按 width 行缓存 → 评估为「不增行缓存」：`wrapLines` 为 O(n) 的 `ceil(displayWidth/columns)` 算术折叠（lib/viewport.js），逐行 on-the-fly 近乎零成本；真正昂贵的是 Markdown 解析，已由 `lib/markdown.js` cachedParseMarkdown 有界 LRU 覆盖。额外的 width 行缓存省下的是微秒级，收益<复杂度，不作为独立优化。
+- [x] token 按 turn:step 去重 + 上下文压力提示 → `lib/usage.js` dedupeUsage/hasAnyUsage（按事件 seq 去重、零态判别），已接入会话统计。
 
 ## 取舍原则
 
