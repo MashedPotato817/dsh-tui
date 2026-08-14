@@ -41,12 +41,12 @@
 10. 触发一个**非白名单工具**（如 `run_code` 试读高开销操作），确认审批卡片弹出：
     - `y` = 允许一次；`Y` = 本会话允许；`n` = 拒绝。
     - 重点验证新「模态锁定」：审批挂起时**打字不会进输入框**；`ESC`/`Ctrl+C` 可退出/中断。
-    - `acceptEdits` 档下编辑工具自动放行、bypass 全放行。
-11. 让 host 发一次 `question/requested`（提问型交互），确认**自动应答**（首选/plan-review 在 manual 档默认拒绝），回合不卡死。
+    - `acceptEdits` 档下编辑工具自动放行；bypass 默认不可进入，只有配置 `allowBypassPermissions: true` 后才全放行。
+11. 让 host 发一次 `question/requested`（提问型交互），确认出现选择面板；`↑/↓` 选择、`Enter` 逐题确认，`Esc/n` 安全拒绝，按键不漏进输入框。
 - [ ] y / Y / n 三态可用
 - [ ] 审批期打字不进输入框（模态锁定，`a495a3c`）
-- [ ] acceptEdits / bypass 档自动放行
-- [ ] 问询自动应答、回合不阻塞
+- [ ] acceptEdits 自动放行；bypass 默认隐藏、显式开启后才可用
+- [ ] 问询面板可选择/拒绝，回合不阻塞且按键不漏入输入框
 
 ## 4. 快捷键与稳定性
 

@@ -128,7 +128,7 @@ function inlineText(line) {
 	);
 }
 
-function MessageRow({ message, currentNow = null, fromLine = 0, maxLines = Infinity }) {
+function MessageRow({ message, currentNow = null, fromLine = 0, maxLines = Infinity, columns = 80, clipped = false }) {
 	const { role, text, pending, injected } = message;
 	// 转义外部文本里可能注入的控制字符（ESC/BEL/NUL 等），防破坏布局/终端转义。
 	const body = sanitizeControlChars(String(text || ""));
@@ -158,8 +158,8 @@ function MessageRow({ message, currentNow = null, fromLine = 0, maxLines = Infin
 		// 用户消息：整行暗灰背景横条（对标 Claude Code），只在开头保留很暗的 `>`，
 		// 让用户输入与 assistant 正文自然分组；pending 用状态前缀提示。
 		// 行级视口：对边界消息裁掉 fromLine 之前的原始行（用户消息一般短，线性切分足够）。
-		const clippedBody = fromLine > 0
-			? body.split("\n").slice(Math.max(0, fromLine)).join("\n")
+		const clippedBody = clipped
+			? sliceTextByVisualLines(body, Math.max(1, columns - 4), fromLine, maxLines)
 			: body;
 		const badge = pending ? (warn ? "⚠" : "⟳") : ">";
 		const bg = "#333333";
@@ -181,7 +181,12 @@ function MessageRow({ message, currentNow = null, fromLine = 0, maxLines = Infin
 			h(Text, { dim: true, color: "gray" }, "（已收到回复，但模型未生成文本内容）")
 		);
 	}
-	return h(MarkdownBody, { text: body, fromLine, maxLines });
+	if (clipped) {
+		const visible = sliceTextByVisualLines(body, Math.max(1, columns - 4), fromLine, maxLines);
+		return h(Box, {}, fromLine <= 0 ? h(Text, { color: "magenta", bold: true }, "● ") : null,
+			h(Text, { dim: fromLine > 0 }, visible));
+	}
+	return h(MarkdownBody, { text: body });
 }
 
 export function ConversationList({ messages, streaming, now, viewport }) {
@@ -191,16 +196,25 @@ export function ConversationList({ messages, streaming, now, viewport }) {
 	const startMsg = viewport ? viewport.startMsg : Math.max(0, messages.length - 60);
 	const startLine = viewport ? (viewport.startLine || 0) : 0;
 	const visible = startMsg > 0 ? messages.slice(startMsg) : messages;
+	let remaining = viewport ? viewport.budget : Infinity;
 	const rows = visible.map((m, i) => {
 		const isBoundary = i === 0;
+		const messageRows = estimateMessageRows(m, viewport?.columns || 80);
+		const fromLine = isBoundary ? startLine : 0;
+		const available = Math.max(0, messageRows - fromLine);
+		const maxLines = Number.isFinite(remaining) ? Math.min(remaining, available) : Infinity;
+		if (Number.isFinite(remaining)) remaining = Math.max(0, remaining - maxLines);
+		if (maxLines <= 0) return null;
 		return h(MessageRow, {
 			key: typeof m.seq === "number" && m.seq >= 0 ? m.seq : `idx-${startMsg + i}`,
 			message: m,
 			currentNow: now,
-			fromLine: isBoundary ? startLine : 0,
-			maxLines: Infinity
+			fromLine,
+			maxLines,
+			columns: viewport?.columns || 80,
+			clipped: fromLine > 0 || maxLines < messageRows
 		});
-	});
+	}).filter(Boolean);
 	if (streaming && streaming.text) {
 		rows.push(h(Box, { key: "stream" }, h(Text, { color: "cyan", bold: true }, "● "), h(Text, { dim: true }, sanitizeControlChars(String(streaming.text)))));
 	}
@@ -308,6 +322,26 @@ export function PendingApprovals({ approvals }) {
 		{ borderStyle: "round", borderColor: "yellow", flexDirection: "column" },
 		h(Text, { bold: true, color: "yellow" }, " 等待批准"),
 		...rows
+	);
+}
+
+/** DSH question/requested 交互面板：必须由用户显式选择，不能静默代答。 */
+export function PendingQuestion({ pending, questionIndex = 0, optionIndex = 0 }) {
+	const questions = pending?.questions ?? [];
+	const question = questions[questionIndex];
+	if (!question) return null;
+	const options = Array.isArray(question.options) ? question.options : [];
+	return h(
+		Box,
+		{ borderStyle: "round", borderColor: "cyan", flexDirection: "column", paddingX: 1 },
+		h(Text, { bold: true, color: "cyan" }, `需要你的选择 ${questionIndex + 1}/${questions.length}`),
+		h(Text, {}, String(question.question ?? question.header ?? "请选择")),
+		...options.map((option, index) => h(Text, {
+			key: `${question.id ?? questionIndex}-${index}`,
+			color: index === optionIndex ? "cyan" : undefined,
+			bold: index === optionIndex
+		}, `${index === optionIndex ? "›" : " "} ${index + 1}. ${String(option.label ?? option)}`)),
+		h(Text, { dim: true, color: "gray" }, "↑/↓ 选择 · Enter 确认 · Esc/n 安全拒绝")
 	);
 }
 
@@ -483,6 +517,8 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 	const [toolView, setToolView] = useState("collapsed");
 	// @ 引用候选当前选中下标
 	const [mentionActive, setMentionActive] = useState(0);
+	// question/requested 模态的当前题与每题选项游标。
+	const [questionDraft, setQuestionDraft] = useState({ rpcId: null, questionIndex: 0, optionIndexes: [] });
 	// 每秒刷新时钟（pending 超时提示用）
 	const [now, setNow] = useState(() => Date.now());
 	// 应用级 follow-tail：scrollLines>0 表示用户上翻离开了底部（followTail=false），
@@ -496,6 +532,17 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		const t = setInterval(() => setNow(Date.now()), 1000);
 		return () => clearInterval(t);
 	}, []);
+
+	useEffect(() => {
+		const pending = snapshot.pendingQuestions?.[0];
+		if (!pending) {
+			if (questionDraft.rpcId !== null) setQuestionDraft({ rpcId: null, questionIndex: 0, optionIndexes: [] });
+			return;
+		}
+		if (questionDraft.rpcId !== pending.rpcId) {
+			setQuestionDraft({ rpcId: pending.rpcId, questionIndex: 0, optionIndexes: (pending.questions ?? []).map(() => 0) });
+		}
+	}, [snapshot.pendingQuestions, questionDraft.rpcId]);
 
 	// 项目文档计数 + 文件/目录列表（供 @ 引用补全，含嵌套路径以支持目录下钻）：
 	// 仅在 cwd 变化时用有界 BFS 扫一次，避免每帧重读。
@@ -540,11 +587,13 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 
 	useEffect(() => {
 		conv.onState = (state) => setSnapshot({ ...state });
-		conv.open().catch((error) => {
+		// 先完成权威基线，再启动唯一一条 history 轮询；避免两次 history 并发覆盖
+		// 用户刚发送的乐观消息。send 本身仍可立即回显，baseline 会保留 pending。
+		conv.open().then(() => {
+			if (typeof conv.startHistorySync === "function") conv.startHistorySync();
+		}).catch((error) => {
 			setSnapshot((s) => ({ ...s, notice: `连接失败：${error.message}` }));
 		});
-		// 启动 history 轮询兜底：mux 断帧时回复仍能从 history 到达。
-		if (typeof conv.startHistorySync === "function") conv.startHistorySync();
 		return () => conv.close();
 	}, [conv]);
 
@@ -591,16 +640,20 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		const hasPendingApproval = snapshot.pendingApprovals && snapshot.pendingApprovals.length > 0;
 		if (hasPendingApproval && !key.ctrl) {
 			const pending = snapshot.pendingApprovals[0];
+			const answer = (outcome) => conv.answerApproval(pending, outcome).catch((error) => {
+				conv.state.notice = `审批应答失败：${error.message}`;
+				conv.emit();
+			});
 			if (input === "y") {
-				conv.answerApproval(pending, "allowed-once");
+				answer("allowed-once");
 				return;
 			}
 			if (input === "Y") {
-				conv.answerApproval(pending, "allowed-session");
+				answer("allowed-session");
 				return;
 			}
 			if (input === "n") {
-				conv.answerApproval(pending, "rejected");
+				answer("rejected");
 				return;
 			}
 		}
@@ -608,6 +661,59 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		// （Claude Code 审批卡同款「模态锁定」）。全局键（Ctrl+C 中断、Ctrl+L 清屏等）在其下处理。
 		if (hasPendingApproval && !key.ctrl && !key.meta && !key.alt && !key.escape) {
 			// 仍允许 Tab/方向键导航审批列表？当前只答第一项，故直接吞掉防键入。
+			return;
+		}
+		// question/requested 也是模态：逐题选择并确认，不把按键漏进输入框。
+		const pendingQuestion = !hasPendingApproval ? snapshot.pendingQuestions?.[0] : null;
+		if (pendingQuestion && !key.ctrl && !key.meta && !key.alt) {
+			const questions = pendingQuestion.questions ?? [];
+			const qi = Math.min(questionDraft.questionIndex, Math.max(0, questions.length - 1));
+			const options = Array.isArray(questions[qi]?.options) ? questions[qi].options : [];
+			const current = questionDraft.optionIndexes[qi] ?? 0;
+			if (key.upArrow || key.downArrow) {
+				if (options.length) {
+					const delta = key.upArrow ? -1 : 1;
+					const next = (current + delta + options.length) % options.length;
+					setQuestionDraft((draft) => {
+						const indexes = [...draft.optionIndexes]; indexes[qi] = next;
+						return { ...draft, optionIndexes: indexes };
+					});
+				}
+				return;
+			}
+			if (key.escape || input === "n") {
+				const answers = questions.map((question) => {
+					const opts = Array.isArray(question.options) ? question.options : [];
+					const reject = opts.find((option) => /拒绝|取消|否|decline|reject|cancel|\bno\b/i.test(String(option.label ?? option))) ?? opts[opts.length - 1];
+					return { id: question.id, selected: reject ? [String(reject.label ?? reject)] : [] };
+				});
+				conv.answerQuestion(pendingQuestion, answers).catch((error) => {
+					conv.state.notice = `问题应答失败：${error.message}`;
+					conv.emit();
+				});
+				return;
+			}
+			if (key.return) {
+				if (!options.length) {
+					conv.state.notice = "该问题没有可选答案，请按 Esc 安全拒绝";
+					conv.emit();
+					return;
+				}
+				if (qi < questions.length - 1) {
+					setQuestionDraft((draft) => ({ ...draft, questionIndex: qi + 1 }));
+					return;
+				}
+				const answers = questions.map((question, index) => {
+					const opts = Array.isArray(question.options) ? question.options : [];
+					const option = opts[questionDraft.optionIndexes[index] ?? 0];
+					return { id: question.id, selected: option ? [String(option.label ?? option)] : [] };
+				});
+				conv.answerQuestion(pendingQuestion, answers).catch((error) => {
+					conv.state.notice = `问题应答失败：${error.message}`;
+					conv.emit();
+				});
+				return;
+			}
 			return;
 		}
 		// Claude Code 式 Ctrl+C：运行中 → 中断当前回合；空闲 → 800ms 内双按退出。
@@ -638,14 +744,14 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		}
 		// Claude Code 式权限档位循环：Shift+Tab（Windows 终端也可 Alt+M）。
 		if (key.shift && key.tab) {
-			const next = nextMode(conv.permissionMode);
+			const next = nextMode(conv.permissionMode, { allowBypass: conv.permissionOptions?.allowBypassPermissions === true });
 			conv.setPermissionMode(next);
 			conv.state.notice = `权限档位：${modeBadge(next)}（${modeColor(next)}）`;
 			conv.emit();
 			return;
 		}
 		if (key.meta && (input === "m" || input === "M")) {
-			const next = nextMode(conv.permissionMode);
+			const next = nextMode(conv.permissionMode, { allowBypass: conv.permissionOptions?.allowBypassPermissions === true });
 			conv.setPermissionMode(next);
 			conv.state.notice = `权限档位：${modeBadge(next)}`;
 			conv.emit();
@@ -796,7 +902,10 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		((snapshot.pendingApprovals && snapshot.pendingApprovals.length ? 3 + snapshot.pendingApprovals.length : 0) +
 			((snapshot.tools && snapshot.tools.length ? Math.min(snapshot.tools.length, 5) + 1 : 0)) +
 			((snapshot.queue && snapshot.queue.length ? Math.min(snapshot.queue.length, 3) + 1 : 0)) +
-			((snapshot.subagents && snapshot.subagents.length ? Math.min(snapshot.subagents.length, 3) + 1 : 0)));
+			((snapshot.subagents && snapshot.subagents.length ? Math.min(snapshot.subagents.length, 3) + 1 : 0)) +
+			((snapshot.pendingQuestions && snapshot.pendingQuestions.length
+				? Math.min(snapshot.pendingQuestions[0]?.questions?.[questionDraft.questionIndex]?.options?.length ?? 0, 6) + 4
+				: 0)));
 	// 流式正文也纳入固定高度预算（避免增长中的正文把输入区顶走）。
 	const streamRows = snapshot.streaming && snapshot.streaming.text
 		? Math.ceil(displayWidth(snapshot.streaming.text) / Math.max(1, columns - 6))
@@ -843,6 +952,11 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 			? h(Box, { borderStyle: "round", borderColor: "yellow" }, h(Text, { bold: true, color: "yellow" }, ` ⏳ 正在重连… ${snapshot.reconnecting.n}/${snapshot.reconnecting.max}`))
 			: null,
 		h(PendingApprovals, { approvals: snapshot.pendingApprovals }),
+		h(PendingQuestion, {
+			pending: snapshot.pendingQuestions?.[0],
+			questionIndex: questionDraft.questionIndex,
+			optionIndex: questionDraft.optionIndexes[questionDraft.questionIndex] ?? 0
+		}),
 		h(ToolCards, { tools: snapshot.tools, show: toolView }),
 		h(QueueDock, { queue: snapshot.queue }),
 		h(SubagentDock, { subagents: snapshot.subagents }),
@@ -867,7 +981,7 @@ import { projectDocsLabel } from "../lib/docs.js";
 import { detectIntent, buildMentionCandidates, mentionRef } from "../lib/mention.js";
 import { toolSummary } from "../lib/tool-summary.js";
 import { cachedParseMarkdown, inlineFragments } from "../lib/markdown.js";
-import { windowViewport, messageBudget, displayWidth } from "../lib/viewport.js";
+import { windowViewport, messageBudget, displayWidth, estimateMessageRows, sliceTextByVisualLines } from "../lib/viewport.js";
 import { sanitizeControlChars } from "../lib/safety.js";
 import { scanWorkspace } from "../lib/scan.js";
 

@@ -26,7 +26,7 @@
   - `allowed-session` 是**客户端本地语义**（dsh-tui 已正确实现：host 收 `allowed-once` + 本地 `sessionAllowedTools` 记住）。
   - "拒绝并中止" host 不认 → 需走其它机制（如 session.cancel），不新增 outcome。
   - **结论**：审批能落地的"态"就是一次 `allowed-once` / 拒绝 `rejected` / 会话记住（本地）+ 中止（cancel 侧路）；不新增四态 outcome，避免向 host 发非法值破坏 approval 流。
-- [x] **question 默认自动应答（修默认模式阻塞 bug）**：TUI 无完整交互式提问 UI（policy.js 记录），故 `question/requested` 在默认 interactive 模式也统一走 `#autoReply` 安全策略——普通问询选首个选项，plan-review 在 manual/plan 档自动拒绝（decline）。避免「挂起等一个永远不会来的 answerQuestion」导致回合卡死；保留 `pendingQuestions`+`answerQuestion` 供未来交互式 UI 接管。approval 仍挂起等 y/Y/n（UI 有对应交互）。
+- [x] **question 显式交互**：`question/requested` 在 interactive 模式进入模态选择面板，支持逐题 `↑/↓`、`Enter` 确认与 `Esc/n` 安全拒绝，且按键不会漏入输入框；只有 auto 模式才执行保守自动应答。approval 仍挂起等 y/Y/n。
 
 ### Batch 2 —— 补全与命令（✅ 主项已交付 fdab239）
 - [x] `@` 文件补全升级：目录内查询下钻 + 子序列打分排序 + 回车整 token 替换 + 空格自动 `@"path"` quoted（`lib/mention.js`）。

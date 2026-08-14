@@ -17,6 +17,8 @@ Claude Code 的 agent 对话 + 类似 Vim 的模态输入 —— 在两者之间
 
 ## 安装
 
+需要 Node.js 22 或更高版本（Ink 7 与内建 WebSocket 传输的运行时要求）。
+
 已发布到 npm，一条命令全局安装：
 
 ```bash

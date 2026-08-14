@@ -21,28 +21,28 @@ test("parseMode：各种别名解析到档位", () => {
 	assert.equal(parseMode("unknown-mode"), PERMISSION_MODES.MANUAL, "未知回退 manual");
 });
 
-test("nextMode：Shift+Tab 循环", () => {
+test("nextMode：默认循环不暴露 bypass，显式允许后才加入", () => {
 	let m = PERMISSION_MODES.MANUAL;
 	const seq = [];
 	for (let i = 0; i < 4; i++) {
 		m = nextMode(m);
 		seq.push(m);
 	}
-	assert.deepEqual(seq, [
+	assert.deepEqual(seq.slice(0, 3), [
 		PERMISSION_MODES.ACCEPT_EDITS,
 		PERMISSION_MODES.PLAN,
-		PERMISSION_MODES.BYPASS,
 		PERMISSION_MODES.MANUAL
 	]);
+	assert.equal(nextMode(PERMISSION_MODES.PLAN, { allowBypass: true }), PERMISSION_MODES.BYPASS);
 });
 
-test("allowToolsForMode：manual/plan 空白名单，acceptEdits 给编辑工具，bypass 给 allowTools", () => {
+test("allowToolsForMode：manual/plan 空，acceptEdits 给编辑工具，bypass 明确代表全部", () => {
 	const editable = ["write", "edit"];
 	const allow = ["browser_navigate"];
 	assert.deepEqual(allowToolsForMode(PERMISSION_MODES.MANUAL, { editableTools: editable, allowTools: allow }), []);
 	assert.deepEqual(allowToolsForMode(PERMISSION_MODES.PLAN, { editableTools: editable, allowTools: allow }), []);
 	assert.deepEqual(allowToolsForMode(PERMISSION_MODES.ACCEPT_EDITS, { editableTools: editable, allowTools: allow }), editable);
-	assert.deepEqual(allowToolsForMode(PERMISSION_MODES.BYPASS, { editableTools: editable, allowTools: allow }), allow);
+	assert.deepEqual(allowToolsForMode(PERMISSION_MODES.BYPASS, { editableTools: editable, allowTools: allow }), ["*"]);
 });
 
 test("shouldDeclinePlanReview：manual/plan 拒绝，acceptEdits/bypass 放行", () => {

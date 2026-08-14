@@ -49,7 +49,7 @@
   ],
   "license": "MIT",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "check": "node --check lib/index.js && node --check lib/client.js && node --check lib/fold.js && node --check lib/session.js && node --check lib/stream.js && node --check lib/live.js && node --check lib/vim.js && node --check lib/hud.js && node --check lib/bridge.js && node --check lib/slash.js && node --check lib/permission.js && node --check lib/command-loader.js && node --check lib/config.js && node --check lib/history.js && node --check lib/diff.js && node --check lib/ui-mode.js && node --check lib/version.js && node --check lib/docs.js && node --check lib/mention.js && node --check lib/tool-summary.js && node --check lib/markdown.js && node --check lib/viewport.js && node --check lib/safety.js && node --check lib/timing.js && node --check lib/scan.js && node --check lib/usage.js && node --check lib/mode.js && node --check lib/queue.js && node --check bin/tui.js && node --check bin/interactive.js && node --check scripts/flywheel.mjs && node --check scripts/tag-version.mjs",

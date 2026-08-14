@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderToString } from "ink";
 import React from "react";
-import App, { HelpPanel, ToolCards } from "../ui/components.js";
+import App, { HelpPanel, ToolCards, PendingQuestion } from "../ui/components.js";
 import { initialState } from "../lib/live.js";
 import { hudState } from "../lib/hud.js";
 // 提供一个假 conv 让 App 的 useEffect 不碰网络
@@ -55,6 +55,27 @@ test("App 渲染：超长回复不得整片消失（P0 回归）", () => {
 	// 修复后：最新长回复的尾部至少应可见若干行；不能只剩「Worked for」而无任何正文。
 	const hasBody = /第\s*\d+\s*行内容/.test(output);
 	assert.ok(hasBody, "超长回复应至少有尾部可见，而非整片空白");
+});
+
+test("App 渲染：无换行超长段落仍显示视口尾部", () => {
+	const conv = fakeConv();
+	conv.state.messages = [{ role: "assistant", seq: 2, text: "ABCDEFGH".repeat(1000) }];
+	const output = renderToString(React.createElement(App, {
+		conv,
+		session: { sessionId: "session-long", agentPreset: "code", cwd: "C:\\work" },
+		onCommand: () => {}, onExit: () => {}
+	}));
+	assert.ok(output.includes("ABCDEFGH"), "自动折行的单段长回复不得被 fromLine 切成空白");
+});
+
+test("PendingQuestion：显示问题、选项和显式确认提示", () => {
+	const output = renderToString(React.createElement(PendingQuestion, {
+		pending: { questions: [{ id: "q1", question: "继续？", options: [{ label: "是" }, { label: "否" }] }] },
+		questionIndex: 0, optionIndex: 1
+	}));
+	assert.ok(output.includes("继续"));
+	assert.ok(output.includes("是") && output.includes("否"));
+	assert.ok(output.includes("Enter"));
 });
 
 test("hudState + renderToString：流式草稿渲染", () => {

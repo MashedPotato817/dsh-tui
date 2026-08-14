@@ -1,7 +1,7 @@
 // 单元飞轮:终端可视行预算裁剪 viewport（长对话不顶走输入区的核心）。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { displayWidth, wrapLines, estimateMessageRows, tailWithinBudget, messageBudget, buildLineLayout, windowViewport } from "../lib/viewport.js";
+import { displayWidth, wrapLines, estimateMessageRows, tailWithinBudget, messageBudget, buildLineLayout, windowViewport, splitVisualLines, sliceTextByVisualLines } from "../lib/viewport.js";
 
 test("displayWidth：东亚字符宽 2、ASCII 宽 1", () => {
 	assert.equal(displayWidth("abc"), 3);
@@ -15,6 +15,12 @@ test("wrapLines：按终端宽度折行，至少 1", () => {
 	assert.equal(wrapLines("a".repeat(240), 80), 3);
 	assert.equal(wrapLines("abc", 0), 1); // 太窄至少 1
 	assert.equal(wrapLines("中".repeat(100), 50), 4); // 中文宽 2
+});
+
+test("视觉行切片：无显式换行的超长段落也能从中间分页", () => {
+	assert.deepEqual(splitVisualLines("abcdefghij", 4), ["abcd", "efgh", "ij"]);
+	assert.equal(sliceTextByVisualLines("abcdefghij", 4, 1, 2), "efgh\nij");
+	assert.deepEqual(splitVisualLines("中文中文", 4), ["中文", "中文"]);
 });
 
 test("estimateMessageRows：普通消息一行，长文本按折行", () => {

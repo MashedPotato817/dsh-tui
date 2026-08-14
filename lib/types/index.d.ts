@@ -28,6 +28,7 @@ export interface LastTurnEnd {
   turn: number;
   reason: unknown | null;
   seq?: number;
+  time?: number | null;
 }
 export interface FoldedView {
   messages: FoldedMessage[];
@@ -35,6 +36,7 @@ export interface FoldedView {
   turn: number;
   lastTurnEnd: LastTurnEnd | null;
   turnStartTime: number | null;
+  turnEndedAt: number | null;
   lastSeq: number;
   model: string | null;
   contextWindow: number | null;
@@ -78,7 +80,7 @@ export function mintRpcId(): string;
 
 // ---------- stream ----------
 export class MuxStream {
-  constructor(client: DshClient, sessionId: string);
+  constructor(baseUrl: string, opts?: { WebSocketImpl?: unknown });
   frames(opts?: { signal?: AbortSignal }): AsyncGenerator<{ rpcId?: string; payload: unknown }>;
 }
 export function respond(client: DshClient, rpcId: string, result: object): Promise<unknown>;
@@ -93,6 +95,7 @@ export interface LiveState {
   turn: number;
   lastTurnEnd: LastTurnEnd | null;
   turnStartTime: number | null;
+  turnEndedAt: number | null;
   lastSeq: number;
   streaming: { text?: string; usage?: object } | null;
   running: boolean;
@@ -106,6 +109,8 @@ export interface LiveState {
   subagents: Array<{ sessionId: string; running?: boolean; summary?: string }>;
   notice: string | null;
   reconnecting: { n: number; max: number } | null;
+  activePhase?: "thinking" | "responding" | "tools" | null;
+  phaseTiming?: string | null;
   connected: boolean;
   error: string | null;
 }
@@ -118,6 +123,7 @@ export class LiveConversation {
     policy?: {
       editableTools?: Array<string>;
       allowTools?: Array<string>;
+      allowBypassPermissions?: boolean;
       questions?: Record<string, unknown>;
     } | null;
     approvalMode?: string;
@@ -135,7 +141,7 @@ export class LiveConversation {
   answerQuestion(q: object, answers: Array<{ id: string; selected: Array<string> }>): Promise<void>;
   switchSession(session: Session): Promise<void>;
   setPermissionMode(mode: string): string;
-  startHistorySync(intervalMs?: number): void;
+  startHistorySync(intervalMs?: number): Promise<void>;
   resolveStuckPending(stuckAfterMs?: number): void;
   refreshHistory(): Promise<boolean>;
   refreshSubagents?(): Promise<void>;
@@ -223,7 +229,7 @@ export function clearRecent(): void;
 // ---------- permission ----------
 export const PERMISSION_MODES: Record<string, string>;
 export function parseMode(mode: string): string;
-export function nextMode(mode: string): string;
+export function nextMode(mode: string, opts?: { allowBypass?: boolean }): string;
 export function allowToolsForMode(mode: string): Array<string>;
 export function shouldDeclinePlanReview(mode: string): boolean;
 export function modeBadge(mode: string): string;
@@ -241,6 +247,7 @@ export interface RuntimeConfig {
   permissionMode: string;
   editableTools?: Array<string>;
   allowTools?: Array<string>;
+  allowBypassPermissions?: boolean;
 }
 export function defaultConfig(): object;
 export function parseConfig(text: string): object | null;
@@ -302,9 +309,13 @@ export function markdownCacheSize(): number;
 // ---------- viewport ----------
 export function displayWidth(text: string): number;
 export function wrapLines(text: string, columns: number): number;
+export function splitVisualLines(text: string, columns: number): Array<string>;
+export function sliceTextByVisualLines(text: string, columns: number, startLine?: number, maxLines?: number): string;
 export function estimateMessageRows(msg: { role?: string; text?: string }, columns: number, opts?: { userIndent?: number }): number;
 export function tailWithinBudget(messages: Array<{ text?: string; role?: string }>, budget: number, columns: number): { start: number; lines: number };
 export function messageBudget(terminalRows: number, fixed?: object): number;
+export function buildLineLayout(messages: Array<{ text?: string; role?: string }>, columns: number): Array<{ msgIndex: number; lineStart: number; lineCount: number }>;
+export function windowViewport(messages: Array<{ text?: string; role?: string }>, budget: number, columns: number, scrollLines?: number): { startMsg: number; startLine: number; scrollLines: number; budget: number; columns: number };
 
 // ---------- safety ----------
 export function sanitizeControlChars(text: string): string;

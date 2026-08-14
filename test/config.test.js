@@ -9,6 +9,7 @@ test("defaultConfig：合理默认", () => {
 	assert.equal(cfg.approvalMode, "interactive");
 	assert.equal(cfg.defaultPermissionMode, PERMISSION_MODES.MANUAL);
 	assert.deepEqual(cfg.editableTools, []);
+	assert.equal(cfg.allowBypassPermissions, false);
 	assert.deepEqual(cfg.prices, {});
 });
 
@@ -19,6 +20,7 @@ approvalMode: auto
 defaultPermissionMode: acceptEdits
 editableTools: ["write", "edit"]
 allowTools: ["browser_navigate"]
+allowBypassPermissions: true
 prices:
   deepseek-chat:
     input: 0.5
@@ -28,6 +30,7 @@ maxToolOutputLines: 3
 	assert.equal(cfg.defaultPermissionMode, "acceptEdits");
 	assert.deepEqual(cfg.editableTools, ["write", "edit"]);
 	assert.deepEqual(cfg.allowTools, ["browser_navigate"]);
+	assert.equal(cfg.allowBypassPermissions, true);
 	assert.equal(cfg.prices["deepseek-chat"].input, 0.5);
 	assert.equal(cfg.maxToolOutputLines, 3);
 });
@@ -51,9 +54,10 @@ test("loadConfig：注入 fs 读文件；缺失回退默认", () => {
 });
 
 test("configToRuntime：映射到 LiveConversation 断言", () => {
-	const rt = configToRuntime({ approvalMode: "auto", defaultPermissionMode: PERMISSION_MODES.ACCEPT_EDITS, editableTools: ["write"], allowTools: ["x"] });
+	const rt = configToRuntime({ approvalMode: "auto", defaultPermissionMode: PERMISSION_MODES.ACCEPT_EDITS, editableTools: ["write"], allowTools: ["x"], allowBypassPermissions: true });
 	assert.equal(rt.approvalMode, "auto");
 	assert.equal(rt.permissionMode, PERMISSION_MODES.ACCEPT_EDITS);
 	assert.deepEqual(rt.editableTools, ["write"]);
 	assert.deepEqual(rt.allowTools, ["x"]);
+	assert.equal(rt.allowBypassPermissions, true);
 });

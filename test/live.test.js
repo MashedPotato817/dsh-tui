@@ -349,7 +349,7 @@ test("approval/requested 自动放行 respond 失败时保留 pending（Codex �
 	assert.equal(st.notice, "自动审批应答失败：network down（保留待你处理 y/n）", "应提示失败且可重试");
 });
 
-test("question/requested（auto 与 interactive 均自动应答普通问询；保留 answerQuestion API）", async () => {
+test("question/requested：auto 自动应答，interactive 挂起等待显式 answerQuestion", async () => {
 	// auto 模式
 	const { conv, stream } = setup([], { approvalMode: "auto" });
 	await conv.open();
@@ -357,13 +357,13 @@ test("question/requested（auto 与 interactive 均自动应答普通问询；�
 	await tick();
 	assert.equal(conv.client.responds.length, 1, "auto 模式应自动应答一次");
 
-	// 修正意图：默认交互也无完整提问 UI → 普通问询同样安全策略自动应答（选首个选项）
+	// interactive 模式必须留给 TUI 模态面板，禁止静默替用户选第一项。
 	const { conv: conv2, stream: stream2 } = setup();
 	await conv2.open();
 	stream2.push({ type: "question/requested", sessionId: "s1", questions: [{ id: "q2", question: "方案？", options: [{ label: "A" }, { label: "B" }] }] });
 	await tick();
-	assert.equal(conv2.client.responds.length, 1, "interactive 模式普通问询也自动应答（不阻塞回合）");
-	assert.deepEqual(conv2.client.responds[0].result.value.answer.answers, [{ id: "q2", selected: ["A"] }], "默认选首个选项");
+	assert.equal(conv2.client.responds.length, 0, "interactive 模式不应自动代答");
+	assert.equal(conv2.snapshot().pendingQuestions.length, 1, "问题应保持挂起供 UI 选择");
 
 	// 保留待未来交互式 UI 的 answerQuestion 路径仍可 respond（不回归 API 契约）
 	const { conv: conv3, stream: stream3 } = setup();
@@ -372,7 +372,34 @@ test("question/requested（auto 与 interactive 均自动应答普通问询；�
 	await tick();
 	const pendingQ = conv3.snapshot().pendingQuestions[0];
 	await conv3.answerQuestion(pendingQ, [{ id: "q3", selected: ["X"] }]);
-	assert.equal(conv3.client.responds.length, 2, "answerQuestion 追加一次 respond");
+	assert.equal(conv3.client.responds.length, 1, "answerQuestion 显式 respond 一次");
+	assert.deepEqual(conv3.client.responds[0].result.value.answer.answers, [{ id: "q3", selected: ["X"] }]);
+});
+
+test("启动竞态：慢 baseline 不得覆盖用户刚发送的乐观消息", async () => {
+	const { conv } = setup();
+	let releaseHistory;
+	conv.session.history = () => new Promise((resolve) => { releaseHistory = () => resolve({ events: [] }); });
+	const opening = conv.open();
+	await tick();
+	await conv.send("启动后立即发送");
+	assert.equal(conv.snapshot().messages[0].text, "启动后立即发送");
+	releaseHistory();
+	await opening;
+	assert.equal(conv.snapshot().messages[0].text, "启动后立即发送");
+	assert.equal(conv.snapshot().messages[0].pending, true);
+	conv.close();
+});
+
+test("session/subscribed 游标只触发 history 对账，不跳过缺失消息", async () => {
+	const { conv, stream, client } = setup();
+	await conv.open();
+	client.baselineEvents = [mkEvent("user/message", { source: { kind: "user" }, content: [{ type: "text", text: "订阅间隙消息" }] }, 5)];
+	stream.push({ type: "session/subscribed", sessionId: "s1", lastSeq: 5 });
+	await tick();
+	await tick();
+	assert.equal(conv.snapshot().messages.some((message) => message.text === "订阅间隙消息"), true);
+	conv.close();
 });
 
 test("cancelTurn：调用 session.cancel", async () => {

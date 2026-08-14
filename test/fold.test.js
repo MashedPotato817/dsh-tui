@@ -20,6 +20,7 @@ test("空页折叠为空视图", () => {
 		turn: 0,
 		lastTurnEnd: null,
 		turnStartTime: null,
+		turnEndedAt: null,
 		lastSeq: -1,
 		model: null,
 		contextWindow: null
@@ -45,6 +46,13 @@ test("无 turn/start 时 turnStartTime 为 null", () => {
 		{ event: event("user/message", { source: { kind: "user" }, content: [{ type: "text", text: "hi" }] }) }
 	]);
 	assert.equal(view.turnStartTime, null);
+});
+
+test("turn/end 记录稳定结束时间", () => {
+	const end = event("turn/end", { turn: 1, reason: { kind: "completed" } });
+	const view = foldEvents([end]);
+	assert.equal(view.turnEndedAt, end.time);
+	assert.equal(view.lastTurnEnd.time, end.time);
 });
 
 test("user + assistant 消息折叠为两条对话消息，text 块按行连接", () => {

@@ -39,7 +39,7 @@ export async function startInteractive({ baseUrl, sessionId, preset, cwd, mode =
 		client,
 		session,
 		approvalMode: cfg.approvalMode,
-		policy: { editableTools: cfg.editableTools, allowTools: cfg.allowTools }
+		policy: { editableTools: cfg.editableTools, allowTools: cfg.allowTools, allowBypassPermissions: cfg.allowBypassPermissions }
 	});
 	conv.setPermissionMode(cfg.permissionMode);
 
