@@ -39,7 +39,7 @@ pty.onData((data) => { buffer += data; });
 // 阶段的输出标记
 async function run() {
 	try {
-		// 1. 等到 HUD 渲染（含 model/PTC）
+		// 1. 等到 HUD 渲染（含 PTC + 上下文窗 model[1M] 标注——Claude Code 风格）
 		const hud = await waitFor("PTC", 15000);
 		console.log("HUD rendered:", hud);
 		await new Promise((r) => setTimeout(r, 800));

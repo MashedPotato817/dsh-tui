@@ -8,14 +8,14 @@
 import { createElement as h } from "react";
 import { useState, useEffect, useRef } from "react";
 import { Box, Text, useInput } from "ink";
-import { hudState, formatCost } from "../lib/hud.js";
+import { hudState, formatCost, contextWindowLabel, formatDuration, toolDurationLabel } from "../lib/hud.js";
 import { buildSlashPanel } from "../lib/slash.js";
 import { createVim, submitText } from "../lib/vim.js";
 import { processInput } from "../lib/bridge.js";
 import { nextMode, modeBadge, modeColor } from "../lib/permission.js";
 
-/** HUD 一行：`● model | PTC | ⏸ manual | $0.12 | 1.2ki/3o | sessionId cwd` */
-export function HUD({ hud, uiMode }) {
+/** HUD 一行：`● model[1M] | PTC | ⏸ manual | $0.12 | 1.2ki/3o | ctx 4% | ⏱3s  session cwd` */
+export function HUD({ hud, uiMode, docsLabel = "", agentCount = 0 }) {
 	const cost = formatCost(hud.costUsd);
 	const running = hud.running ? "●" : "○";
 	const tok =
@@ -24,15 +24,33 @@ export function HUD({ hud, uiMode }) {
 		? ` | ctx ${hud.contextPct}%`
 		: "";
 	const modeStr = uiMode ? ` | ${uiMode}` : "";
+	// 子代理计数（Claude Code "← 1 agent"）。
+	const agents = agentCount > 0 ? ` | ${agentCount} agent${agentCount > 1 ? "s" : ""}` : "";
 	// cwd 截断成短路径（保留最后两段），避免整行溢出换行导致布局错位
 	const cwdShort = hud.cwd ? hud.cwd.split(/[\\/]/).slice(-2).join("/") : "";
 	const line =
-		` ${running} ${hud.model} | ${hud.mode}${hud.permBadge ? ` | ${hud.permBadge}` : ""}${modeStr}` +
-		`${cost ? ` | ${cost}` : ""} | ${tok}t${ctx}  ${hud.sessionId} ${cwdShort}`;
+		` ${running} ${hud.modelLabel} | ${hud.mode}${hud.permBadge ? ` | ${hud.permBadge}` : ""}${modeStr}` +
+		`${docsLabel ? ` | ${docsLabel}` : ""}${agents}${cost ? ` | ${cost}` : ""} | ${tok}${ctx}` +
+		`${hud.turnElapsedLabel || ""}  ${hud.sessionId} ${cwdShort}`;
 	return h(
 		Box,
 		{ borderStyle: "single", borderColor: "gray", paddingX: 1 },
 		h(Text, { wrap: "truncate" }, line)
+	);
+}
+
+/** 启动 logo banner（Claude Code 顶栏心智）：版本 + HUD 概览，跟随消息上滚消失。 */
+export function Banner({ hud }) {
+	let pkgVersion = "";
+	try { pkgVersion = require("../package.json").version; } catch { /* 嵌入环境无版本 */ }
+	const cost = formatCost(hud.costUsd);
+	return h(
+		Box,
+		{ flexDirection: "column", marginBottom: 1 },
+		h(Text, { bold: true, color: "magenta" }, `▐▛███▜▌  dsh-tui`),
+		h(Text, { dim: true, color: "gray" },
+			`${hud.modelLabel}${pkgVersion ? ` · v${pkgVersion}` : ""}${cost ? ` · ${cost}` : ""} · ${hud.cwd || ""}`
+		)
 	);
 }
 
@@ -164,13 +182,16 @@ export function ToolCards({ tools, limit = 5 }) {
 		} else {
 			badge = "✓"; color = "green";
 		}
+		// 工具迭代耗时（Claude Code 底部 "✻ Sautéed for 3s" / Codex ExecCell duration）
+		const durLabel = toolDurationLabel(t.startedAt, t.finishedAt ?? Date.now());
 		rows.push(
 			h(
 				Box,
 				{ key: t.callId, paddingX: 1 },
 				h(Text, { color, bold: true }, `${badge} `),
 				h(Text, { bold: true }, `${t.name}`),
-				t.args ? h(Text, { dim: true }, `  ${t.args}`) : null
+				t.args ? h(Text, { dim: true }, `  ${t.args}`) : null,
+				durLabel ? h(Text, { dim: true, color: "gray" }, `  ${durLabel}`) : null
 			)
 		);
 		// diff 预览：若工具结果带了 diff meta，展示 +/一行 统计。
@@ -218,6 +239,7 @@ export function HelpPanel() {
 		["/", "斜杠命令"],
 		["Shift+Tab", "权限档位"],
 		["Ctrl+C", "中断（运行中）/ 双按退出"],
+		["Ctrl+L", "清屏"],
 		["?", "此帮助"],
 		["y / Y / n", "审批：允许一次 / 本会话 / 拒绝"]
 	].map(([k, v]) =>
@@ -294,6 +316,8 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 	const [showHelp, setShowHelp] = useState(false);
 	// 命令历史（normal 模态 j/k 翻历史）
 	const [history, setHistory] = useState(() => createHistory());
+	// 项目内置文档计数标签（Claude Code "1 CLAUDE.md"）
+	const [docsLabel, setDocsLabel] = useState("");
 	// 每秒刷新时钟（pending 超时提示用）
 	const [now, setNow] = useState(() => Date.now());
 
@@ -301,6 +325,19 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		const t = setInterval(() => setNow(Date.now()), 1000);
 		return () => clearInterval(t);
 	}, []);
+
+	// 项目文档计数：仅在 cwd 变化时读一次目录。
+	useEffect(() => {
+		const cwd = (liveSession && liveSession.cwd) || "";
+		if (!cwd) { setDocsLabel(""); return; }
+		let cancelled = false;
+		try {
+			const { readdirSync } = require("node:fs");
+			const names = readdirSync(cwd, { encoding: "utf8" });
+			if (!cancelled) setDocsLabel(projectDocsLabel(names));
+		} catch { if (!cancelled) setDocsLabel(""); }
+		return () => { cancelled = true; };
+	}, [liveSession && liveSession.cwd]);
 
 	useEffect(() => {
 		try {
@@ -338,7 +375,7 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		return () => clearInterval(t);
 	}, [conv]);
 
-	const hud = hudState({ view: snapshot, session: liveSession });
+	const hud = hudState({ view: snapshot, session: liveSession, now });
 
 	useInput((input, key) => {
 		// `?`（normal 模态）切换快捷键帮助面板（Claude Code 心智模型）。
@@ -390,6 +427,11 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 			lastCtrlC.current = now;
 			conv.state.notice = "再按 Ctrl+C 退出";
 			conv.emit();
+			return;
+		}
+		// Codex 式 Ctrl+L 清屏：清终端滚动区，不清对话历史。
+		if (key.ctrl && (input === "l" || input === "L")) {
+			try { process.stdout.write("\x1b[2J\x1b[H"); } catch { /* 非 TTY 静默 */ }
 			return;
 		}
 		// Claude Code 式权限档位循环：Shift+Tab（Windows 终端也可 Alt+M）。
@@ -472,6 +514,7 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		{ flexDirection: "column", flexGrow: 1 },
 		// 消息区：全部消息 + 流式草稿（普通渲染，一次可见，不用 <Static> 以避免漏显）。
 		h(Box, { flexDirection: "column", flexGrow: 1, minHeight: 2 },
+			h(Banner, { hud }),
 			ConversationList({ messages: snapshot.messages, streaming: snapshot.streaming, now }),
 			snapshot.messages.length === 0 && !(snapshot.streaming && snapshot.streaming.text)
 				? h(Text, { key: "empty", dim: true }, "( 空会话 — 直接输入，Enter 发送，/ 命令 )")
@@ -488,14 +531,18 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		h(SlashPanel, { panel: slashPanel }),
 		h(Notice, { notice: snapshot.notice }),
 		// HUD 放在输入框上方（贴近底部）——用户从最底部输入，HUD 常驻可见
-		h(HUD, { hud, uiMode }),
+		h(HUD, { hud, uiMode, docsLabel, agentCount: (snapshot.subagents || []).length }),
 		h(CommandInput, { vim })
 	);
 }
 
 // slash 面板命令源：内置 + 本地 + 自定义
+import { createRequire } from "node:module";
 import { allCommands as allCommandsFn } from "../lib/commands.js";
 import { loadCustomCommands } from "../lib/command-loader.js";
 import { createHistory, pushHistory, navigateHistory } from "../lib/history.js";
 import { diffLinesFrom, classifyDiffLines, diffStats, diffSummary } from "../lib/diff.js";
 import { deriveMode, modeLabel } from "../lib/ui-mode.js";
+import { projectDocsLabel } from "../lib/docs.js";
+
+const require = createRequire(import.meta.url);

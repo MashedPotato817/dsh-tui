@@ -19,10 +19,32 @@ test("空页折叠为空视图", () => {
 		tools: [],
 		turn: 0,
 		lastTurnEnd: null,
+		turnStartTime: null,
 		lastSeq: -1,
 		model: null,
 		contextWindow: null
 	});
+});
+
+test("turn/start 记录 turnStartTime；tool 记录 startedAt / finishedAt", () => {
+	const turnStart = event("turn/start", { turn: 1 });
+	const callEv = event("tool/call", { turn: 1, step: 0, callId: "call-t", name: "run_code", arguments: "{}" });
+	const resultEv = event("tool/result", {
+		turn: 1, step: 0,
+		message: { id: "m", role: "user", content: [{ type: "tool-result", toolCallId: "call-t", content: [] }], source: { kind: "tool" } }
+	});
+	const view = foldEvents([{ event: turnStart }, { event: callEv }, { event: resultEv }]);
+	assert.equal(view.turnStartTime, turnStart.time, "turnStartTime 来自 turn/start 的 time");
+	assert.equal(view.tools[0].startedAt, callEv.time);
+	assert.equal(view.tools[0].finishedAt, resultEv.time);
+	assert.equal(view.tools[0].status, "done");
+});
+
+test("无 turn/start 时 turnStartTime 为 null", () => {
+	const view = foldEvents([
+		{ event: event("user/message", { source: { kind: "user" }, content: [{ type: "text", text: "hi" }] }) }
+	]);
+	assert.equal(view.turnStartTime, null);
 });
 
 test("user + assistant 消息折叠为两条对话消息，text 块按行连接", () => {

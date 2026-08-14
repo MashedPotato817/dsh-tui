@@ -11,6 +11,7 @@ Claude Code 的 agent 对话 + 类似 Vim 的模态输入 —— 在两者之间
 - **Vim 形式**：normal / insert / command 三模态，`i/a/o` 输入、`h/j/k/l` 移动、`ESC` 切换
 - **PTC 模式**：默认用 DSH 的 `code` agent preset（Code Mode SDK，多步操作一次往返）
 - **实时流**：mux SSE 流式渲染，`assistant/chunk` 边生成边显示
+- **成熟产品对齐的状态栏**：Claude Code 风格 HUD（上下文窗 model[1M]、回合耗时 ⏱、内置文档计数、子 agent 计数）——综合 OpenCode / Codex 的输入与键位理念
 - **会话管理**：记忆最近会话、`/resume` 恢复、`/new` 新建、会话中切换
 - **开放核心**：`core/` 纯 Node 零依赖，`ui/` 是 Ink 层——VSCode 集成可直接复用 core
 
@@ -70,7 +71,7 @@ dsh-tui --new | head
 lib/        core 层（零依赖）：client/fold/session/stream/live/vim/hud/policy/... 
 ui/         Ink 组件层
 bin/        cli 入口（interactive + run + list）
-test/       单元飞轮（118 例）
+test/       单元飞轮（128 例）
 test-live/  live 飞轮（真实 host，DSH_TEST_LIVE=1 才跑）
 ```
 
@@ -85,7 +86,7 @@ test-live/  live 飞轮（真实 host，DSH_TEST_LIVE=1 才跑）
 ## 开发
 
 ```bash
-npm test          # 单元飞轮（快，118 例）
+npm test          # 单元飞轮（快，128 例）
 npm run test:live # live 飞轮（真实 host，会调真实模型）
 npm run flywheel  # --watch 快速迭代
 ```

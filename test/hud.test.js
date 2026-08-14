@@ -1,7 +1,7 @@
 // 单元飞轮：HUD 状态派生 —— token 汇总、成本计算、mode 映射。
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sumUsage, priceFor, costUsd, hudState, formatCost, DEFAULT_PRICES } from "../lib/hud.js";
+import { sumUsage, priceFor, costUsd, hudState, formatCost, DEFAULT_PRICES, formatDuration, turnElapsedLabel, contextWindowLabel, toolDurationLabel } from "../lib/hud.js";
 
 test("sumUsage：消息 + 流式草稿的 token 汇总", () => {
 	const usage = sumUsage(
@@ -54,4 +54,43 @@ test("formatCost：紧凑格式", () => {
 	assert.equal(formatCost(0.12), "$0.120");
 	assert.equal(formatCost(1.5), "$1.50");
 	assert.equal(formatCost(null), null);
+});
+
+test("formatDuration：秒/分/时切换", () => {
+	assert.equal(formatDuration(3000), "3s");
+	assert.equal(formatDuration(59_000), "59s");
+	assert.equal(formatDuration(65_000), "1m 5s");
+	assert.equal(formatDuration(125_000), "2m 5s");
+	assert.equal(formatDuration(3_720_000), "1h 2m");
+	assert.equal(formatDuration(null), null);
+	assert.equal(formatDuration(-5), null);
+});
+
+test("turnElapsedLabel：HUD 回合耗时段", () => {
+	assert.equal(turnElapsedLabel(1_000_000, 1_003_000), " ⏱3s");
+	assert.equal(turnElapsedLabel(null, Date.now()), "");
+	assert.equal(turnElapsedLabel(1_000_000, 999_000), "");
+});
+
+test("contextWindowLabel：model[1M] / [16k] 标注", () => {
+	assert.equal(contextWindowLabel("deepseek-chat", 1_000_000), "deepseek-chat[1M]");
+	assert.equal(contextWindowLabel("m", 16_000), "m[16k]");
+	assert.equal(contextWindowLabel("gpt", 2_500_000), "gpt[2.5M]");
+	assert.equal(contextWindowLabel("m", null), "m");
+	assert.equal(contextWindowLabel(null, null), "—");
+});
+
+test("toolDurationLabel：工具迭代耗时", () => {
+	assert.equal(toolDurationLabel(1_000_000, 1_003_000), "(3s)");
+	assert.equal(toolDurationLabel(null, 1_003_000), null);
+	assert.equal(toolDurationLabel(1_000_000, null), null);
+});
+
+test("hudState：turnStartTime 存在时派生回合耗时标签", () => {
+	const view = { messages: [], streaming: null, running: true, model: "deepseek-chat", turnStartTime: 1_000_000 };
+	const hud = hudState({ view, session: { agentPreset: "code" }, now: 1_003_500 });
+	assert.equal(hud.turnElapsedLabel, " ⏱4s");
+	assert.equal(hud.modelLabel, "deepseek-chat");
+	// 无 now 时回退 Date.now()，turnStartTime=now → label 为空（仍在原点）
+	assert.equal(hudState({ view: { ...view, turnStartTime: Date.now() }, session: { agentPreset: "code" } }).turnElapsedLabel, "");
 });
