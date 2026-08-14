@@ -91,7 +91,19 @@ async function run() {
 			fail("输入区标记（insert）不可见：输入区可能被历史顶出屏幕");
 		}
 
-		// 7. 输出清理后的最终画面（去掉控制序列）便于人工核对
+		// 7. 应用级 follow-tail：PageUp 上翻 → 应出现「回到底部」提示且不跳顶；End 回到底部
+		pty.write("\x1b[5~"); // PageUp
+		await sleep(500);
+		if (buffer.includes("End 回到底部") || buffer.includes("上面还有历史")) {
+			console.log("follow-tail: PageUp 显示回到底部提示 OK");
+		} else {
+			fail("PageUp 后未出现「End 回到底部」提示（follow-tail 提示缺失）");
+		}
+		pty.write("\x1b[F"); // End → 回到底部跟随
+		await sleep(400);
+		console.log("follow-tail: End 已回到底部");
+
+		// 8. 输出清理后的最终画面（去掉控制序列）便于人工核对
 		const clean = buffer.replace(/\x1b\[[0-9;]*[A-Za-z]/g, "").replace(/[^\x20-\x7E\u4e00-\u9fa5\n]/g, "").trim();
 		console.log("--- final screen (clean tail) ---");
 		console.log(clean.split("\n").slice(-24).join("\n"));

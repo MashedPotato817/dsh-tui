@@ -116,6 +116,7 @@ test("流式：chunk 累积成 streaming 草稿，assistant/message 落定进消
 	await pushOne({ type: "session/event", sessionId: "s1", event: mkEvent("assistant/chunk", { turn: 1, step: 0, chunk: { type: "block-start", index: 0, blockType: "text" } }, 2) });
 	await pushOne({ type: "session/event", sessionId: "s1", event: mkEvent("assistant/chunk", { turn: 1, step: 0, chunk: { type: "text-delta", index: 0, text: "你" } }, 3) });
 	await pushOne({ type: "session/event", sessionId: "s1", event: mkEvent("assistant/chunk", { turn: 1, step: 0, chunk: { type: "text-delta", index: 0, text: "好" } }, 4) });
+	conv.flushStreaming(); // 流式批合并后需手动/定时 flush 才可见
 	assert.equal(conv.snapshot().streaming.text, "你好");
 	assert.equal(conv.snapshot().running, true);
 
@@ -127,6 +128,53 @@ test("流式：chunk 累积成 streaming 草稿，assistant/message 落定进消
 	assert.equal(state.running, false);
 	assert.deepEqual(state.messages.map((m) => m.text), ["hi", "你好"]);
 	assert.equal(state.messages[1].usage.outputTokens, 2);
+});
+
+test("流式合并：1000 个 delta 批处理发布次数≪chunk数，最终文本严格一致", async () => {
+	const { conv, stream } = setup();
+	await conv.open();
+	let emitCount = 0;
+	conv.onState = () => { emitCount += 1; };
+	// 开头：block-start + turn/start 使 internal 有内容
+	const seqBase = 1;
+	stream.push({ type: "session/event", sessionId: "s1", event: mkEvent("turn/start", { turn: 1 }, seqBase) });
+	stream.push({ type: "session/event", sessionId: "s1", event: mkEvent("assistant/chunk", { turn: 1, step: 0, chunk: { type: "block-start", index: 0, blockType: "text" } }, seqBase + 1) });
+	// 一次性推入 1000 个单字符 delta（不 await，全进同一批）
+	const expected = [];
+	for (let i = 0; i < 1000; i++) {
+		const ch = String(i % 10);
+		expected.push(ch);
+		stream.push({ type: "session/event", sessionId: "s1", event: mkEvent("assistant/chunk", { turn: 1, step: 0, chunk: { type: "text-delta", index: 0, text: ch } }, seqBase + 2 + i) });
+	}
+	await tick(); // 让 consumer 消费这些帧（同步路径，emit 被合并）
+	const emitsBeforeBroadcast = emitCount; // 应远小于 1001
+	conv.flushStreaming(); // 发布最终 batch
+	const text = conv.snapshot().streaming?.text ?? "";
+	assert.equal(text, expected.join(""), "最终文本必须与所有 delta 严格拼接一致");
+	assert.ok(emitsBeforeBroadcast < 50, `合并后 emit 次数应远小于 chunk 数，实际 ${emitsBeforeBroadcast}`);
+});
+
+test("流式：含换行的正文立即 flush，不等 50ms 批", async () => {
+	const { conv, stream } = setup();
+	await conv.open();
+	stream.push({ type: "session/event", sessionId: "s1", event: mkEvent("turn/start", { turn: 1 }, 1) });
+	stream.push({ type: "session/event", sessionId: "s1", event: mkEvent("assistant/chunk", { turn: 1, step: 0, chunk: { type: "block-start", index: 0, blockType: "text" } }, 2) });
+	// 双换行 = 段落边界 → hasFlushSignal 触发立即 flush
+	stream.push({ type: "session/event", sessionId: "s1", event: mkEvent("assistant/chunk", { turn: 1, step: 0, chunk: { type: "text-delta", index: 0, text: "第一段\n\n第二段" } }, 3) });
+	await tick();
+	assert.equal(conv.snapshot().streaming?.text, "第一段\n\n第二段", "换行应立即可见");
+});
+
+test("流式：usage 不触发正文重绘（不发正文批）", async () => {
+	const { conv, stream } = setup();
+	await conv.open();
+	let emitForBody = 0;
+	conv.onState = () => { emitForBody += 1; };
+	stream.push({ type: "session/event", sessionId: "s1", event: mkEvent("assistant/chunk", { turn: 1, step: 0, chunk: { type: "usage", usage: { inputTokens: 1, outputTokens: 1 } } }, 1) });
+	await tick();
+	const before = emitForBody;
+	conv.flushStreaming();
+	assert.equal(before, 0, "usage 单独到达不应触发正文 emit");
 });
 
 test("send：乐观回显 pending 行，真实 user/message 到达后替换（不重复）", async () => {

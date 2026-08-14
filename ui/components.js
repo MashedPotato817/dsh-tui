@@ -443,6 +443,9 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 	const [mentionActive, setMentionActive] = useState(0);
 	// 每秒刷新时钟（pending 超时提示用）
 	const [now, setNow] = useState(() => Date.now());
+	// 应用级 follow-tail：viewOffset>0 表示用户上翻离开了底部（followTail=false），
+	// 此时 streaming/工具/计时不得把阅读锚点拉回；End/Ctrl+End 归零回到底部。
+	const [viewOffset, setViewOffset] = useState(0);
 	// 终端尺寸（columns/rows）：用于按视觉行预算裁剪消息区，长历史不顶走输入区；resize 会触发重渲染。
 	const { columns, rows } = useWindowSize();
 
@@ -583,6 +586,11 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 			conv.cancelTurn();
 			return;
 		}
+		// 应用级历史翻页（不依赖 WT 原生 scrollback）：PageUp/PageDown 翻，End 回底部。
+		// viewOffset>0 表示离开底部；新内容到达不会拉回（followTail=false 语义）。
+		if (key.pageUp) { setViewOffset((o) => o + 1); return; }
+		if (key.pageDown) { setViewOffset((o) => Math.max(0, o - 1)); return; }
+		if ((key.end) || (key.ctrl && key.end)) { setViewOffset(0); return; }
 
 		const currentText = submitText(vim);
 		// @ 文件引用补全面板导航（OpenCode 心智）：Tab/方向键循环，Enter 把选中文件插入输入。
@@ -679,15 +687,24 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 			((snapshot.tools && snapshot.tools.length ? Math.min(snapshot.tools.length, 5) + 1 : 0)) +
 			((snapshot.queue && snapshot.queue.length ? Math.min(snapshot.queue.length, 3) + 1 : 0)) +
 			((snapshot.subagents && snapshot.subagents.length ? Math.min(snapshot.subagents.length, 3) + 1 : 0)));
+	// 流式正文也纳入固定高度预算（避免增长中的正文把输入区顶走）。
+	const streamRows = snapshot.streaming && snapshot.streaming.text
+		? Math.ceil(displayWidth(snapshot.streaming.text) / Math.max(1, columns - 6))
+		: 0;
 	const msgBudget = messageBudget(rows || 30, {
 		banner: 2,
 		hud: 1,
 		input: 2,
 		worked: workedLabel ? 1 : 0,
 		docks: docksRows,
+		stream: streamRows,
 		margin: 2
 	});
-	const viewport = tailWithinBudget(snapshot.messages, msgBudget, columns || 80);
+	const tail = tailWithinBudget(snapshot.messages, msgBudget, columns || 80);
+	// 应用 follow-tail：viewOffset=0 跟随最新尾部；>0 则把视口起点往前推（看更早历史），
+	// 并保证不越界。新内容到达时，只要 viewOffset>0 就保持用户锚点（不自动跳回）。
+	const start = Math.max(0, tail.start - viewOffset * Math.max(1, Math.floor(msgBudget / 2)));
+	const viewport = { start, lines: tail.lines };
 
 	return h(
 		Box,
@@ -698,6 +715,10 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 			ConversationList({ messages: snapshot.messages, streaming: snapshot.streaming, now, viewport }),
 			workedLabel
 				? h(Box, { key: "worked", marginTop: 1 }, h(Text, { dim: true, color: "gray" }, workedLabel))
+				: null,
+			viewOffset > 0
+				? h(Box, { key: "follow-hint", marginTop: 1 },
+						h(Text, { dim: true, color: "cyan" }, "↓ 上面还有历史 · End 回到底部"))
 				: null,
 			snapshot.messages.length === 0 && !(snapshot.streaming && snapshot.streaming.text)
 				? h(Box, { key: "empty", flexDirection: "column", marginTop: 1 },
@@ -733,6 +754,6 @@ import { projectDocsLabel } from "../lib/docs.js";
 import { detectIntent, buildMentionCandidates } from "../lib/mention.js";
 import { toolSummary } from "../lib/tool-summary.js";
 import { parseMarkdown, inlineFragments } from "../lib/markdown.js";
-import { tailWithinBudget, messageBudget } from "../lib/viewport.js";
+import { tailWithinBudget, messageBudget, displayWidth } from "../lib/viewport.js";
 
 const require = createRequire(import.meta.url);
