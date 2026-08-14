@@ -68,7 +68,8 @@ function MessageRow({ message }) {
 
 export function ConversationList({ messages, streaming }) {
 	// 渲染全部消息（落定 + pending + 注入），普通 Box 一次渲染，可靠可见。
-	const rows = messages.map((m, i) => h(MessageRow, { key: m.seq ?? i, message: m }));
+	// key：有真实 seq 用 seq，否则用索引（pending 行 seq=-1 不可作 key，避免 -1 冲突）。
+	const rows = messages.map((m, i) => h(MessageRow, { key: typeof m.seq === "number" && m.seq >= 0 ? m.seq : `idx-${i}`, message: m }));
 	if (streaming && streaming.text) {
 		rows.push(h(Box, { key: "stream" }, h(Text, { dim: true, color: "magenta" }, "◉ "), h(Text, { dim: true }, String(streaming.text))));
 	}
@@ -424,6 +425,8 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 				setHistory((h) => pushHistory(h, text));
 				conv.send(text).catch(() => {});
 			}
+			// 发送后清空输入框，回到空 insert（对标 Claude Code：发送即清屏）
+			setVim({ ...createVim(), mode: "insert" });
 		} else if (result.action === "run-command") {
 			const command = result.command ?? "";
 			if (command === "q" || command === "quit") {
