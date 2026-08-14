@@ -33,8 +33,8 @@
 - [x] 嵌套 fs 扫描支持真下钻 → `lib/scan.js` scanWorkspace（有界 BFS，注入 listDir 保持纯函数），App 启动时有界扫嵌套路径（maxEntries 4000/depth 5），@ 补全真正下钻。
 
 ### Batch 3 —— 架构健壮（中-高风险，宜稳扎稳打）
-- [ ] 显式全局 mode 状态机 + keybinding 表（对话/审批/命令/补全/历史 各态不打架）。
-- [ ] 对话框改异步 FIFO 模态队列（不阻塞主循环，AbortSignal 贯穿）。
+- [x] 显式全局 mode 状态机 + keybinding 表（对话/审批/命令/补全/历史 各态不打架）→ `lib/mode.js` MODES/transitionMode/keyOwner（0acadfc/8cd307a）。
+- [x] 对话框改异步 FIFO 模态队列（不阻塞主循环，AbortSignal 贯穿）→ `lib/queue.js` createModalQueue（4c83026，5 用例绿）。纯原语已就绪，接入审批/问题弹窗为后续可选 wiring。
 - [x] 计时改共享游标单次扫描 → `lib/timing.js` createTimingAccumulator/advanceTiming（O(events) 防二次方退化），已接入 live 相位分相。
 
 ### Batch 4 —— 性能与渲染（在已有 follow-tail / markdown 之上）
