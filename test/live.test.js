@@ -301,6 +301,40 @@ test("cancelTurn：调用 session.cancel", async () => {
 	assert.match(conv.snapshot().notice, /停止/);
 });
 
+test("history 兜底：mux 断帧时轮询 history 也能落定 pending + 显示回复", async () => {
+	// history 第一次(baseline)返回空，之后返回 user+assistant —— 模拟 mux 事件没来，靠 history 兜底
+	const host = new FakeClient();
+	let historyCalls = 0;
+	const historyEvents = [
+		mkEvent("user/message", { source: { kind: "user" }, content: [{ type: "text", text: "问" }] }, 10),
+		mkEvent("assistant/message", { turn: 1, step: 0, message: { id: "m", role: "assistant", content: [{ type: "text", text: "答" }], source: { kind: "model" } } }, 11),
+		mkEvent("turn/end", { turn: 1, reason: { kind: "completed" } }, 12)
+	];
+	host.request = async (method, payload) => {
+		if (method === "session.history") {
+			historyCalls += 1;
+			if (historyCalls === 1) return { events: [], hasMore: false }; // baseline 空
+			return { events: historyEvents.map((e) => ({ event: e })), hasMore: false };
+		}
+		if (method === "session.prompt") return { accepted: true };
+		throw new Error(`unexpected ${method}`);
+	};
+	const conv = new LiveConversation({
+		client: host,
+		session: { sessionId: "s2", history: (p) => host.request("session.history", p), prompt: () => host.request("session.prompt") },
+		stream: new FakeStream()
+	});
+	await conv.open();
+	// send 后再启动 history 兜底：此时 history 含 user+assistant，sync 应拉回并落定 pending
+	await conv.send("问");
+	conv.startHistorySync(30);
+	await new Promise((r) => setTimeout(r, 90));
+	conv.close();
+	const st = conv.snapshot();
+	assert.ok(st.messages.some((m) => m.role === "assistant" && m.text === "答"), "history 兜底应拉到 assistant 回复");
+	assert.ok(!st.messages.some((m) => m.pending), "pending 应被真实 user 落定");
+});
+
 test("refreshSubagents：调 subagent.list，填充子代理列表", async () => {
 	const { conv } = setup();
 	await conv.open();
