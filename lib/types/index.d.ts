@@ -321,3 +321,9 @@ export function timingSummary(buckets: { thinking?: number; responding?: number;
 // ---------- scan ----------
 export function scanWorkspace(listDir: (dir: string) => { files: Array<string>; dirs: Array<string> }, opts?: { maxEntries?: number; maxDepth?: number; rootPrefix?: string }): { files: Array<string>; dirs: Array<string> };
 export function mentionScanEntries(scan: { files: Array<string>; dirs: Array<string> }): Array<string>;
+
+// ---------- usage ----------
+export interface UsageBuckets { input: number; output: number; cacheRead: number; cacheWrite: number }
+export function usageZero(): UsageBuckets;
+export function dedupeUsage(messages: Array<{ seq?: number; usage?: object; text?: string; role?: string }>): UsageBuckets;
+export function hasAnyUsage(u: UsageBuckets | null): boolean;
