@@ -3,3 +3,7 @@ node_modules/
 .DS_Store
 .pnpm-store/
 .vscode/
+
+# TTY/smoke 运行时产生的临时文件
+terminal-ui-essentials.md
+_writetest.txt
