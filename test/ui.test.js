@@ -152,3 +152,19 @@ test("App 渲染：空 assistant 回复显示占位而非空行", () => {
 	);
 	assert.ok(output.includes("未生成文本内容"), "空回复应显示占位提示");
 });
+
+test("App 渲染：stuck pending 显示重发警告", () => {
+	const conv = fakeConv();
+	conv.state.messages = [
+		{ role: "user", seq: -1, sentAt: Date.now() - 90_000, text: "问", pending: true, stuck: true }
+	];
+	const output = renderToString(
+		React.createElement(App, {
+			conv,
+			session: { sessionId: "session-abcdef123456", agentPreset: "code", cwd: "C:\\work" },
+			onCommand: () => {},
+			onExit: () => {}
+		})
+	);
+	assert.ok(output.includes("可能未生效"), "stuck pending 应显示重发警告");
+});

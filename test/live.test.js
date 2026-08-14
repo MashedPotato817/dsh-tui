@@ -343,3 +343,20 @@ test("refreshSubagents：调 subagent.list，填充子代理列表", async () =>
 	assert.equal(conv.snapshot().subagents.length, 1);
 	assert.equal(conv.snapshot().subagents[0].sessionId, "session-child");
 });
+
+test("resolveStuckPending：超时未落定的 pending 被标 stuck，正常 pending 不受影响", async () => {
+	const { conv } = setup();
+	await conv.open();
+	conv.state.messages = [
+		// 很久以前发出的（超时）
+		{ role: "user", seq: -1, time: Date.now() - 120_000, sentAt: Date.now() - 120_000, text: "老消息", pending: true },
+		// 刚发出的（未超时）
+		{ role: "user", seq: -1, time: Date.now(), sentAt: Date.now(), text: "新消息", pending: true }
+	];
+	conv.resolveStuckPending(60_000);
+	const st = conv.snapshot();
+	const old = st.messages.find((m) => m.text === "老消息");
+	const fresh = st.messages.find((m) => m.text === "新消息");
+	assert.equal(old.stuck, true, "超时的 pending 应标 stuck");
+	assert.ok(fresh.stuck === undefined, "未超时的 pending 不应标 stuck");
+});

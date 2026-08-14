@@ -51,18 +51,22 @@ function MessageRow({ message, currentNow = null }) {
 		);
 	}
 	if (role === "user") {
-		// pending 超时提示：超过 8s 未落定 → 显示已等待时长 + 提示（不无限挂 ⟳）
-		let pendingSuffix = "";
-		if (pending) {
+		// pending 状态分级：stuck(≥60s 未落定，警告可重发) > 超时(>8s 仍在处理) > 正常
+		let suffix = "";
+		let warn = false;
+		if (pending && message.stuck) {
+			suffix = "（发消息可能未生效 — Enter 重发 / Esc 放弃）";
+			warn = true;
+		} else if (pending) {
 			const elapsed = currentNow - (message.time || message.sentAt || 0);
-			pendingSuffix = elapsed > 8000 ? ` （仍在处理… ${Math.round(elapsed / 1000)}s）` : "";
+			if (elapsed > 8000) { suffix = `（仍在处理… ${Math.round(elapsed / 1000)}s）`; warn = true; }
 		}
 		return h(
 			Box,
 			{ key: undefined },
-			h(Text, { bold: true, color: pending ? (pendingSuffix ? "yellow" : "green") : "green" }, pending ? "⟳ " : "❯ "),
+			h(Text, { bold: true, color: warn ? "red" : "green" }, pending ? (warn ? "⚠ " : "⟳ ") : "❯ "),
 			h(Text, {}, body),
-			pendingSuffix ? h(Text, { dim: true, color: "yellow" }, pendingSuffix) : null
+			suffix ? h(Text, { dim: true, color: warn ? "red" : "yellow" }, suffix) : null
 		);
 	}
 	// assistant：host 回了但没生成文本时给明确占位，避免显示成空行/像没返回。
