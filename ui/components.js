@@ -559,7 +559,8 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 			return;
 		}
 		// 审批交互：有挂起批准时，y/Y/n 处理第一个（Claude Code/Codex 式审批卡片）。
-		if (snapshot.pendingApprovals && snapshot.pendingApprovals.length > 0 && !key.ctrl) {
+		const hasPendingApproval = snapshot.pendingApprovals && snapshot.pendingApprovals.length > 0;
+		if (hasPendingApproval && !key.ctrl) {
 			const pending = snapshot.pendingApprovals[0];
 			if (input === "y") {
 				conv.answerApproval(pending, "allowed-once");
@@ -573,6 +574,12 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 				conv.answerApproval(pending, "rejected");
 				return;
 			}
+		}
+		// 批准是模态：未点 y/Y/n 时，吞掉其余普通键，避免审批弹窗时把字符输进输入框
+		// （Claude Code 审批卡同款「模态锁定」）。全局键（Ctrl+C 中断、Ctrl+L 清屏等）在其下处理。
+		if (hasPendingApproval && !key.ctrl && !key.meta && !key.alt && !key.escape) {
+			// 仍允许 Tab/方向键导航审批列表？当前只答第一项，故直接吞掉防键入。
+			return;
 		}
 		// Claude Code 式 Ctrl+C：运行中 → 中断当前回合；空闲 → 800ms 内双按退出。
 		if (key.ctrl && (input === "c" || input === "C")) {
