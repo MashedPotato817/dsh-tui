@@ -463,6 +463,8 @@ test("refreshHistory：mux 漏掉 turn/end 时，history 兜底把 running 落�
 	assert.equal(changed, true);
 	assert.equal(conv.snapshot().running, false, "history 看到 turn/end 后 running 应落定 false");
 	assert.equal(conv.snapshot().lastTurnEnd.reason.kind, "completed");
+	// P1 #5：history 路径也应落定 turnEndedAt，否则 workedLabel 退回 now 一直走秒。
+	assert.equal(typeof conv.snapshot().turnEndedAt, "number", "history 观察到 turn/end 应设置 turnEndedAt");
 });
 
 test("refreshHistory：无新事件时返回 false 且不改 running", async () => {
