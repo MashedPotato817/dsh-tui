@@ -283,9 +283,11 @@ export function PendingApprovals({ approvals }) {
 	);
 }
 
-/** 工具卡片：把最近的工具调用渲染成折叠卡片（名称 + 状态 + 参数摘要 + diff 摘要）。 */
-export function ToolCards({ tools, limit = 5 }) {
+/** 工具卡片：把最近的工具调用渲染成折叠卡片（名称 + 状态 + 参数摘要 + diff 摘要）。
+ *  `show`: 'collapsed'（默认，单行摘要）| 'expanded'（含 diff 预览）| 'hidden'（不渲染，连空行都不留）。 */
+export function ToolCards({ tools, limit = 5, show = "collapsed" }) {
 	if (!tools || tools.length === 0) return null;
+	if (show === "hidden") return null;
 	const recent = tools.slice(-limit);
 	const rows = [];
 	recent.forEach((t) => {		let badge, color;
@@ -313,8 +315,8 @@ export function ToolCards({ tools, limit = 5 }) {
 				durLabel ? h(Text, { dim: true, color: "gray" }, `  ${durLabel}`) : null
 			)
 		);
-		// diff 预览：若工具结果带了 diff meta，展示 +/一行 统计。
-		if (t.diffMeta) {
+		// diff 预览：仅 expanded 模式展示（collapsed 保持单行干净）。若工具结果带了 diff meta。
+		if (show === "expanded" && t.diffMeta) {
 			const dl = diffLinesFrom(t.diffMeta);
 			const stats = diffStats(dl);
 			if (stats.add || stats.del) {
@@ -368,6 +370,7 @@ export function HelpPanel() {
 		["Shift+Tab", "权限档位"],
 		["Ctrl+C", "中断（运行中）/ 双按退出"],
 		["Ctrl+L", "清屏"],
+		["Ctrl+O", "工具卡循环：折叠 / 展开(diff) / 隐藏"],
 		["?", "此帮助"],
 		["y / Y / n", "审批：允许一次 / 本会话 / 拒绝"]
 	].map(([k, v]) =>
@@ -448,6 +451,8 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 	const [docsLabel, setDocsLabel] = useState("");
 	// cwd 文件列表（供 @ 引用补全；OpenCode 心智）
 	const [cwdFiles, setCwdFiles] = useState([]);
+	// 工具卡三态（Ctrl+O 循环）：collapsed → expanded → hidden（对标 pi-tui ToolCardVisibility）
+	const [toolView, setToolView] = useState("collapsed");
 	// @ 引用候选当前选中下标
 	const [mentionActive, setMentionActive] = useState(0);
 	// 每秒刷新时钟（pending 超时提示用）
@@ -588,6 +593,11 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		// Codex 式 Ctrl+L 清屏：清终端滚动区，不清对话历史。
 		if (key.ctrl && (input === "l" || input === "L")) {
 			try { process.stdout.write("\x1b[2J\x1b[H"); } catch { /* 非 TTY 静默 */ }
+			return;
+		}
+		// pi-tui/Claude Code 式工具卡三态循环：Ctrl+O 在 collapsed → expanded → hidden 间切换。
+		if (key.ctrl && (input === "o" || input === "O")) {
+			setToolView((v) => (v === "collapsed" ? "expanded" : v === "expanded" ? "hidden" : "collapsed"));
 			return;
 		}
 		// Claude Code 式权限档位循环：Shift+Tab（Windows 终端也可 Alt+M）。
@@ -776,7 +786,7 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 			? h(Box, { borderStyle: "round", borderColor: "yellow" }, h(Text, { bold: true, color: "yellow" }, ` ⏳ 正在重连… ${snapshot.reconnecting.n}/${snapshot.reconnecting.max}`))
 			: null,
 		h(PendingApprovals, { approvals: snapshot.pendingApprovals }),
-		h(ToolCards, { tools: snapshot.tools }),
+		h(ToolCards, { tools: snapshot.tools, show: toolView }),
 		h(QueueDock, { queue: snapshot.queue }),
 		h(SubagentDock, { subagents: snapshot.subagents }),
 		mentionCandidates.length > 0 ? h(MentionPanel, { candidates: mentionCandidates, active: mentionActive }) : null,

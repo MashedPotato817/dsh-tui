@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { renderToString } from "ink";
 import React from "react";
-import App, { HelpPanel } from "../ui/components.js";
+import App, { HelpPanel, ToolCards } from "../ui/components.js";
 import { initialState } from "../lib/live.js";
 import { hudState } from "../lib/hud.js";
 // 提供一个假 conv 让 App 的 useEffect 不碰网络
@@ -62,7 +62,7 @@ test("App 渲染：流式草稿 + 等待批准面板都显示", () => {
 	assert.ok(output.includes("run_code"), "批准面板应含工具名");
 });
 
-test("App 渲染：工具卡片显示名称 + 状态徽标 + diff 摘要", () => {
+test("App 渲染：工具卡片显示名称 + 状态徽标（collapsed 默认，diff 摘要折叠）", () => {
 	const conv = fakeConv();
 	conv.state.tools = [
 		{ seq: 5, callId: "c1", name: "run_code", args: '{"code":"1+1"}', status: "running" },
@@ -78,7 +78,15 @@ test("App 渲染：工具卡片显示名称 + 状态徽标 + diff 摘要", () =>
 	);
 	assert.ok(output.includes("run_code"), "工具卡片应显示工具名");
 	assert.ok(output.includes("read") || output.includes("write"), "工具卡片应显示工具名");
-	assert.ok(output.includes("+1/-1"), "应渲染 diff 摘要 +1/-1");
+	assert.ok(!output.includes("+1/-1"), "collapsed 默认隐藏 diff 摘要（Ctrl+O 展开才显示）");
+});
+
+test("ToolCards：expanded 显示 diff 摘要，hidden 不渲染", () => {
+	const tools = [{ seq: 1, callId: "c1", name: "write", args: '{"path":"a.ts"}', status: "done", diffMeta: "--- a.ts\n+++ a.ts\n@@ -1 +1 @@\n-old();\n+new();\n" }];
+	const exp = renderToString(React.createElement(ToolCards, { tools, show: "expanded" }));
+	assert.ok(exp.includes("+1/-1"), "expanded 应显示 diff 摘要");
+	const hid = renderToString(React.createElement(ToolCards, { tools, show: "hidden" }));
+	assert.equal(hid.replace(/\n/g, "").trim(), "", "hidden 不应渲染任何内容");
 });
 
 test("工具卡片：running 工具不显示误导性时长（不累计成 4m2s）", () => {
