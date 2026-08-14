@@ -314,3 +314,7 @@ export function createTimingAccumulator(): TimingAccumulator;
 export function advanceTiming(acc: TimingAccumulator, events: Array<{ phase: string | null; at: number }>): { thinking: number; responding: number; tools: number };
 export function formatDurationMs(ms: number): string | null;
 export function timingSummary(buckets: { thinking?: number; responding?: number; tools?: number }): string;
+
+// ---------- scan ----------
+export function scanWorkspace(listDir: (dir: string) => { files: Array<string>; dirs: Array<string> }, opts?: { maxEntries?: number; maxDepth?: number; rootPrefix?: string }): { files: Array<string>; dirs: Array<string> };
+export function mentionScanEntries(scan: { files: Array<string>; dirs: Array<string> }): Array<string>;

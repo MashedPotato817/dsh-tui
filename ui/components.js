@@ -459,17 +459,33 @@ export default function App({ conv, session, onCommand, onExit, getSession }) {
 		return () => clearInterval(t);
 	}, []);
 
-	// 项目文档计数 + 文件列表（供 @ 引用补全）：仅在 cwd 变化时读一次目录。
+	// 项目文档计数 + 文件/目录列表（供 @ 引用补全，含嵌套路径以支持目录下钻）：
+	// 仅在 cwd 变化时用有界 BFS 扫一次，避免每帧重读。
 	useEffect(() => {
 		const cwd = (liveSession && liveSession.cwd) || "";
 		if (!cwd) { setDocsLabel(""); setCwdFiles([]); return; }
 		let cancelled = false;
 		try {
 			const { readdirSync } = require("node:fs");
-			const names = readdirSync(cwd, { encoding: "utf8" });
+			const { join } = require("node:path");
+			const topNames = readdirSync(cwd, { encoding: "utf8" });
+			// @ 目录下钻：注入 fs 的 listDir（返回 { files, dirs }），产出嵌套相对路径。
+			const listDir = (relDir) => {
+				const full = relDir ? join(cwd, relDir) : cwd;
+				const out = { files: [], dirs: [] };
+				let ents;
+				try { ents = readdirSync(full, { withFileTypes: true }); } catch { return out; }
+				for (const e of ents) {
+					if (e.name.startsWith(".")) continue;
+					if (e.isDirectory()) out.dirs.push(e.name);
+					else out.files.push(e.name);
+				}
+				return out;
+			};
 			if (!cancelled) {
-				setDocsLabel(projectDocsLabel(names));
-				setCwdFiles(names.filter((n) => !n.startsWith(".")));
+				setDocsLabel(projectDocsLabel(topNames));
+				const scan = scanWorkspace(listDir, { maxEntries: 4000, maxDepth: 5 });
+				setCwdFiles([...scan.files, ...scan.dirs]);
 			}
 		} catch { if (!cancelled) { setDocsLabel(""); setCwdFiles([]); } }
 		return () => { cancelled = true; };
@@ -781,5 +797,6 @@ import { toolSummary } from "../lib/tool-summary.js";
 import { parseMarkdown, inlineFragments } from "../lib/markdown.js";
 import { tailWithinBudget, messageBudget, displayWidth } from "../lib/viewport.js";
 import { sanitizeControlChars } from "../lib/safety.js";
+import { scanWorkspace } from "../lib/scan.js";
 
 const require = createRequire(import.meta.url);
